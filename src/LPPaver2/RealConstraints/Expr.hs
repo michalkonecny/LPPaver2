@@ -61,6 +61,7 @@ type ExprNode = ExprF ExprHash
 --
 --  These hashes can be used to efficiently associate any kind of values with the expression nodes.
 data Expr = Expr {nodes :: Map.Map ExprHash ExprNode, root :: ExprHash}
+  deriving (Generic, Hashable)
 
 instance P.Eq Expr where
   e1 == e2 = e1.root == e2.root

@@ -70,6 +70,7 @@ data Form = Form
     nodesF :: Map.Map FormHash FormNode,
     root :: FormHash
   }
+  deriving (Generic, Hashable)
 
 -- | Use this instead of `form.nodesF` to lookup a node in `form`.
 --

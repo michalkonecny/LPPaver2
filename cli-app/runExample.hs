@@ -13,10 +13,17 @@ import BranchAndPrune.BranchAndPrune (Problem (..), Result (..))
 import BranchAndPrune.BranchAndPrune qualified as BP
 import Control.Monad.IO.Unlift (MonadIO (liftIO), MonadUnliftIO)
 import Control.Monad.Logger (MonadLogger, runStdoutLoggingT)
+import Data.Aeson qualified as A
+import Data.ByteString qualified as BSS
+import Data.ByteString.Lazy qualified as BSL
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Maybe (fromJust)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
+import Database.Redis qualified as Redis
 import LPPaver2.BranchAndPrune
+import LPPaver2.Export ()
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
 import System.Environment (getArgs)
@@ -138,14 +145,42 @@ main = do
     _ ->
       error $ "unknown arithmetic: " ++ arith
 
+data RedisDestination = RedisDestination
+  { connection :: Redis.Connection,
+    sessionKeyPrefix :: String
+  }
+
 -- do-nothing trivial step reporting
 instance (MonadIO m) => BP.CanInitControl m where
-  type ControlResources m = ()
-  initControl = pure ()
+  type ControlResources m = RedisDestination
+  initControl = liftIO $ do
+    -- Initialize Redis connection
+    connection <- Redis.checkedConnect Redis.defaultConnectInfo
+    let sessionKeyPrefix = "LPPaver2:default:"
+    -- Clear any previous session data
+    Redis.runRedis connection $ do
+      _ <- Redis.del [stringToBSS $ sessionKeyPrefix <> "boxes"]
+      _ <- Redis.del [stringToBSS $ sessionKeyPrefix <> "exprs"]
+      _ <- Redis.del [stringToBSS $ sessionKeyPrefix <> "forms"]
+      _ <- Redis.del [stringToBSS $ sessionKeyPrefix <> "steps"]
+      pure ()
+    pure $ RedisDestination {connection, sessionKeyPrefix}
   finaliseControl _ = pure ()
 
-instance (MonadIO m) => BP.CanControlSteps m step where
-  reportStep _ _ = pure ()
+stringToBSS :: String -> BSS.ByteString
+stringToBSS = TE.encodeUtf8 . T.pack
+
+instance (MonadIO m) => BP.CanControlSteps m LPPStep where
+  reportStep (RedisDestination {connection, sessionKeyPrefix}) step =
+    liftIO $ Redis.runRedis connection $ do
+      let stepsListKey = stringToBSS $ sessionKeyPrefix <> "steps"
+      -- Extract boxes, formulas and expressions from the step and write them to Redis hashes
+      -- TODO
+
+      -- Push the step JSON to the Redis list of steps
+      let stepJSONBSS = BSL.toStrict $ A.encode step
+      _ <- Redis.rpush stepsListKey [stepJSONBSS]
+      pure ()
 
 mainWithArgs ::
   (CanEval r, HasKleenanComparison r) =>
