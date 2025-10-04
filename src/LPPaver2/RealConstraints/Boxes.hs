@@ -10,6 +10,7 @@ module LPPaver2.RealConstraints.Boxes
     BoxHash,
     BoxStore,
     BoxesList (..),
+    flattenBoxesList,
     Boxes (..),
     boxesCount,
     boxesAreaD,
@@ -93,6 +94,10 @@ data BoxesList
   = BoxesList [BoxHash]
   | BoxesUnion [BoxesList]
   deriving (P.Eq, Generic)
+
+flattenBoxesList :: BoxesList -> [BoxHash]
+flattenBoxesList (BoxesList boxes) = boxes
+flattenBoxesList (BoxesUnion unions) = concatMap flattenBoxesList unions
 
 data Boxes = Boxes {store :: BoxStore, list :: BoxesList}
   deriving (Generic)

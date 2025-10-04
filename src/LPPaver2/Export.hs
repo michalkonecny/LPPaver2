@@ -1,13 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module LPPaver2.Export () where
+module LPPaver2.Export (lppProblemToJSON) where
 
 import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
 import Data.Aeson (ToJSON (toJSON), (.=))
 import Data.Aeson qualified as A
 import Data.Aeson.Key (fromString)
-import GHC.Records ()
+import Data.Aeson.Types qualified as A
+import Data.Hashable (Hashable (hash))
+import GHC.Records (getField)
+import LPPaver2.BranchAndPrune (LPPPaving, LPPProblem)
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
 
@@ -25,7 +28,8 @@ instance A.ToJSON BoxesList where
   toEncoding = A.genericToEncoding A.defaultOptions
 
 instance A.ToJSON Boxes where
-  toEncoding = A.genericToEncoding A.defaultOptions
+  toJSON (Boxes {list}) =
+    A.object ["list" .= flattenBoxesList list]
 
 instance A.ToJSON UnaryOp where
   toEncoding = A.genericToEncoding A.defaultOptions
@@ -59,8 +63,20 @@ instance A.ToJSON Form where
 instance (A.ToJSON problem, A.ToJSON paving) => A.ToJSON (BP.Step problem paving) where
   toEncoding = A.genericToEncoding A.defaultOptions
 
-instance (A.ToJSON constraint, A.ToJSON scope) => A.ToJSON (BP.Problem constraint scope) where
-  toEncoding = A.genericToEncoding A.defaultOptions
+instance A.ToJSON LPPProblem where
+  toJSON = lppProblemToJSON
 
-instance (A.ToJSON constraint, A.ToJSON basicSet, A.ToJSON set) => A.ToJSON (BP.Paving constraint basicSet set) where
-  toEncoding = A.genericToEncoding A.defaultOptions
+lppProblemToJSON :: LPPProblem -> A.Value
+lppProblemToJSON (BP.Problem {scope, constraint}) =
+  A.object ["scope" .= hash scope, "constraint" .= constraint.root]
+
+instance A.ToJSON LPPPaving where
+  toJSON = lppPavingToJSON
+
+lppPavingToJSON :: LPPPaving -> A.Value
+lppPavingToJSON (BP.Paving {scope, inner, undecided}) =
+  A.object
+    [ "scope" .= hash scope,
+      "inner" .= inner,
+      "undecided" .= A.listValue lppProblemToJSON undecided
+    ]
