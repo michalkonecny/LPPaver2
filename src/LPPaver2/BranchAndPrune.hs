@@ -8,6 +8,7 @@ module LPPaver2.BranchAndPrune
     LPPBPResult,
     LPPBPParams (..),
     lppBranchAndPrune,
+    getStepBoxHashes,
   )
 where
 
@@ -16,9 +17,9 @@ import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Logger (MonadLogger)
-import Data.Hashable (Hashable (hash))
 import Data.List qualified as List
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 import GHC.Records
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
@@ -30,6 +31,10 @@ type LPPPaving = BP.Paving Form Box Boxes
 
 type LPPStep = BP.Step LPPProblem LPPPaving
 
+getStepBoxHashes :: LPPStep -> Set.Set BoxHash
+getStepBoxHashes step = 
+  Set.fromList [box.boxHash | BP.Problem {scope = box} <- BP.getStepProblems step]
+
 type LPPBPResult = BP.Result Form Box Boxes
 
 data LPPBPParams = LPPBPParams
@@ -40,8 +45,8 @@ data LPPBPParams = LPPBPParams
   }
 
 shouldGiveUpOnBPLPPProblem :: Rational -> LPPProblem -> Bool
-shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope = Box {..}}) =
-  all smallerThanPrec (Map.elems varDomains)
+shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
+  all smallerThanPrec (Map.elems scope.box_.varDomains)
   where
     smallerThanPrec :: MPBall -> Bool
     smallerThanPrec ball = diameter <= giveUpAccuracy
@@ -85,11 +90,9 @@ instance
       simplifiedConstraint = result.evaluatedForm.form
       mkBoxes box =
         Boxes
-          { store = Map.fromList [(boxHash, box)],
-            list = BoxesList [boxHash]
+          { store = Map.fromList [(box.boxHash, box)],
+            list = BoxesList [box.boxHash]
           }
-        where
-          boxHash = hash box
       pavingP :: BP.Paving Form Box Boxes
       pavingP = case getFormDecision simplifiedConstraint of
         CertainTrue -> BP.pavingInner scope (mkBoxes scope)
@@ -134,8 +137,8 @@ instance BP.IsSet Boxes where
 instance BP.BasicSetsToSet Box Boxes where
   basicSetsToSet list = Boxes {store, list = BoxesList boxHashes}
     where
-      store = Map.fromList [(hash box, box) | box <- list]
-      boxHashes = map hash list
+      store = Map.fromList [(box.boxHash, box) | box <- list]
+      boxHashes = [box.boxHash | box <- list]
 
 instance BP.CanSplitProblem constraint Box where
   splitProblem (BP.Problem {scope, constraint}) =

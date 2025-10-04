@@ -8,7 +8,6 @@ import Data.Aeson (ToJSON (toJSON), (.=))
 import Data.Aeson qualified as A
 import Data.Aeson.Key (fromString)
 import Data.Aeson.Types qualified as A
-import Data.Hashable (Hashable (hash))
 import GHC.Records (getField)
 import LPPaver2.BranchAndPrune (LPPPaving, LPPProblem)
 import LPPaver2.RealConstraints
@@ -20,6 +19,9 @@ instance A.ToJSON MP.MPBall where
       (l, u) = MP.endpoints b
       lD = double l
       uD = double u
+
+instance A.ToJSON Box_ where
+  toEncoding = A.genericToEncoding A.defaultOptions
 
 instance A.ToJSON Box where
   toEncoding = A.genericToEncoding A.defaultOptions
@@ -68,7 +70,7 @@ instance A.ToJSON LPPProblem where
 
 lppProblemToJSON :: LPPProblem -> A.Value
 lppProblemToJSON (BP.Problem {scope, constraint}) =
-  A.object ["scope" .= hash scope, "constraint" .= constraint.root]
+  A.object ["scope" .= scope.boxHash, "constraint" .= constraint.root]
 
 instance A.ToJSON LPPPaving where
   toJSON = lppPavingToJSON
@@ -76,7 +78,7 @@ instance A.ToJSON LPPPaving where
 lppPavingToJSON :: LPPPaving -> A.Value
 lppPavingToJSON (BP.Paving {scope, inner, undecided}) =
   A.object
-    [ "scope" .= hash scope,
+    [ "scope" .= scope.boxHash,
       "inner" .= inner,
       "undecided" .= A.listValue lppProblemToJSON undecided
     ]
