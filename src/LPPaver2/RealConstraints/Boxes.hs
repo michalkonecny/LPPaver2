@@ -10,8 +10,6 @@ module LPPaver2.RealConstraints.Boxes
     splitBox,
     BoxHash,
     BoxStore,
-    BoxesList (..),
-    flattenBoxesList,
     Boxes (..),
     boxesCount,
     boxesAreaD,
@@ -97,42 +95,23 @@ boxAreaD box =
 type BoxHash = Int
 
 type BoxStore = Map.Map BoxHash Box
-
-boxHAreaD :: BoxStore -> BoxHash -> Double
-boxHAreaD store boxH = case Map.lookup boxH store of
-  Nothing -> double 0 -- Box not found
-  Just box -> boxAreaD box
-
-data BoxesList
-  = BoxesList [BoxHash]
-  | BoxesUnion [BoxesList]
-  deriving (P.Eq, Generic)
-
-flattenBoxesList :: BoxesList -> [BoxHash]
-flattenBoxesList (BoxesList boxes) = boxes
-flattenBoxesList (BoxesUnion unions) = concatMap flattenBoxesList unions
-
-data Boxes = Boxes {store :: BoxStore, list :: BoxesList}
+newtype Boxes = Boxes {store :: BoxStore}
   deriving (Generic)
 
 instance P.Show Boxes where
-  show (Boxes {store, list}) =
+  show boxes =
     printf
       "Boxes(count=%d, area=%.3f)"
-      (boxesCount (Boxes {store, list}))
-      (boxesAreaD (Boxes {store, list}))
+      (boxesCount boxes)
+      (boxesAreaD boxes)
 
 boxesCount :: Boxes -> Integer
-boxesCount (Boxes {list}) = boxesListCount list
-  where
-    boxesListCount (BoxesList boxes) = length boxes
-    boxesListCount (BoxesUnion union) = sum (map boxesListCount union)
+boxesCount (Boxes {store}) = integer $ Map.size store
 
 boxesAreaD :: Boxes -> Double
-boxesAreaD (Boxes {store, list}) = boxesListAreaD list
-  where
-    boxesListAreaD (BoxesList boxes) = sum (map (boxHAreaD store) boxes)
-    boxesListAreaD (BoxesUnion union) = sum (map boxesListAreaD union)
+boxesAreaD (Boxes {store}) = sum (map boxAreaD (Map.elems store))
+
+{-- Splitting boxes --}
 
 splitBox :: Box -> [Box]
 splitBox box = case box.box_.splitOrder of

@@ -8,7 +8,7 @@ module LPPaver2.BranchAndPrune
     LPPBPResult,
     LPPBPParams (..),
     lppBranchAndPrune,
-    getStepBoxHashes,
+    getStepBoxes,
   )
 where
 
@@ -17,9 +17,7 @@ import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Logger (MonadLogger)
-import Data.List qualified as List
 import Data.Map qualified as Map
-import Data.Set qualified as Set
 import GHC.Records
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
@@ -31,9 +29,18 @@ type LPPPaving = BP.Paving Form Box Boxes
 
 type LPPStep = BP.Step LPPProblem LPPPaving
 
-getStepBoxHashes :: LPPStep -> Set.Set BoxHash
-getStepBoxHashes step = 
-  Set.fromList [box.boxHash | BP.Problem {scope = box} <- BP.getStepProblems step]
+getStepBoxes :: LPPStep -> BoxStore
+getStepBoxes step =
+  scopesStore `Map.union` pavingBoxStore
+  where
+    scopesStore = boxListToStore $ problemsScopes <> pavingsScopes
+    boxListToStore :: [Box] -> BoxStore
+    boxListToStore boxes = Map.fromList [(box.boxHash, box) | box <- boxes]
+    problems = BP.getStepProblems step
+    problemsScopes = [p.scope | p <- problems]
+    pavings = BP.getStepPavings step
+    pavingsScopes = [p.scope | p <- pavings]
+    pavingBoxStore = Map.unions [paving.inner.store `Map.union` paving.outer.store | paving <- pavings]
 
 type LPPBPResult = BP.Result Form Box Boxes
 
@@ -88,11 +95,7 @@ instance
     where
       result = simplifyEvalForm sampleR scope constraint
       simplifiedConstraint = result.evaluatedForm.form
-      mkBoxes box =
-        Boxes
-          { store = Map.fromList [(box.boxHash, box)],
-            list = BoxesList [box.boxHash]
-          }
+      mkBoxes box = Boxes {store = Map.fromList [(box.boxHash, box)]}
       pavingP :: BP.Paving Form Box Boxes
       pavingP = case getFormDecision simplifiedConstraint of
         CertainTrue -> BP.pavingInner scope (mkBoxes scope)
@@ -123,22 +126,14 @@ instance BP.ShowStats (BP.Subset Boxes Box) where
       coveragePercent = 100 * (boxesAreaD subset / boxAreaD superset)
 
 instance BP.IsSet Boxes where
-  emptySet = Boxes {store = Map.empty, list = BoxesList []}
-  setIsEmpty (Boxes {list}) = boxListIsEmpty list
-    where
-      boxListIsEmpty (BoxesList boxes) = null boxes
-      boxListIsEmpty (BoxesUnion union) = List.all boxListIsEmpty union
-  setUnion bs1 bs2 =
-    Boxes
-      { store = Map.union bs1.store bs2.store,
-        list = BoxesUnion [bs1.list, bs2.list]
-      }
+  emptySet = Boxes {store = Map.empty}
+  setIsEmpty (Boxes {store}) = Map.null store
+  setUnion bs1 bs2 = Boxes {store = Map.union bs1.store bs2.store}
 
 instance BP.BasicSetsToSet Box Boxes where
-  basicSetsToSet list = Boxes {store, list = BoxesList boxHashes}
+  basicSetsToSet list = Boxes {store}
     where
       store = Map.fromList [(box.boxHash, box) | box <- list]
-      boxHashes = [box.boxHash | box <- list]
 
 instance BP.CanSplitProblem constraint Box where
   splitProblem (BP.Problem {scope, constraint}) =

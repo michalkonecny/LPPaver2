@@ -19,6 +19,7 @@ import Data.ByteString.Lazy qualified as BSL
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Maybe (fromJust)
+import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Database.Redis qualified as Redis
@@ -173,14 +174,25 @@ stringToBSS = TE.encodeUtf8 . T.pack
 instance (MonadIO m) => BP.CanControlSteps m LPPStep where
   reportStep (RedisDestination {connection, sessionKeyPrefix}) step =
     liftIO $ Redis.runRedis connection $ do
+      let boxesListKey = stringToBSS $ sessionKeyPrefix <> "boxes"
       let stepsListKey = stringToBSS $ sessionKeyPrefix <> "steps"
       -- Extract boxes, formulas and expressions from the step and write them to Redis hashes
       -- TODO
+      -- updateRedisHashStore boxesListKey (getStepBoxHashes step)
 
       -- Push the step JSON to the Redis list of steps
       let stepJSONBSS = BSL.toStrict $ A.encode step
       _ <- Redis.rpush stepsListKey [stepJSONBSS]
       pure ()
+
+-- updateRedisHashStore :: BSS.ByteString -> BoxStore -> Redis.Redis ()
+-- updateRedisHashStore key store = do
+--   let entries =
+--         [ (stringToBSS (show boxHash), BSL.toStrict $ A.encode box)
+--           | (boxHash, box) <- Map.toList store
+--         ]
+--   _ <- Redis.hset key entries
+--   pure ()
 
 mainWithArgs ::
   (CanEval r, HasKleenanComparison r) =>

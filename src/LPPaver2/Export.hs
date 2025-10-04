@@ -8,6 +8,7 @@ import Data.Aeson (ToJSON (toJSON), (.=))
 import Data.Aeson qualified as A
 import Data.Aeson.Key (fromString)
 import Data.Aeson.Types qualified as A
+import Data.Map qualified as Map
 import GHC.Records (getField)
 import LPPaver2.BranchAndPrune (LPPPaving, LPPProblem)
 import LPPaver2.RealConstraints
@@ -26,12 +27,9 @@ instance A.ToJSON Box_ where
 instance A.ToJSON Box where
   toEncoding = A.genericToEncoding A.defaultOptions
 
-instance A.ToJSON BoxesList where
-  toEncoding = A.genericToEncoding A.defaultOptions
-
 instance A.ToJSON Boxes where
-  toJSON (Boxes {list}) =
-    A.object ["list" .= flattenBoxesList list]
+  toJSON (Boxes {store}) =
+    A.object ["boxes" .= Map.keys store]
 
 instance A.ToJSON UnaryOp where
   toEncoding = A.genericToEncoding A.defaultOptions
