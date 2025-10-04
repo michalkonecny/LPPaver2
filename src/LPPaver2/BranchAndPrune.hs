@@ -16,6 +16,7 @@ import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Logger (MonadLogger)
+import Data.Hashable (Hashable (hash))
 import Data.List qualified as List
 import Data.Map qualified as Map
 import GHC.Records
@@ -82,9 +83,17 @@ instance
     where
       result = simplifyEvalForm sampleR scope constraint
       simplifiedConstraint = result.evaluatedForm.form
+      mkBoxes box =
+        Boxes
+          { store = Map.fromList [(boxHash, box)],
+            list = BoxesList [boxHash]
+          }
+        where
+          boxHash = hash box
+      pavingP :: BP.Paving Form Box Boxes
       pavingP = case getFormDecision simplifiedConstraint of
-        CertainTrue -> BP.pavingInner scope (Boxes [scope])
-        CertainFalse -> BP.pavingOuter scope (Boxes [scope])
+        CertainTrue -> BP.pavingInner scope (mkBoxes scope)
+        CertainFalse -> BP.pavingOuter scope (mkBoxes scope)
         _ -> BP.pavingUndecided scope [BP.Problem {scope, constraint = simplifiedConstraint}]
 
 newtype BoxStack = BoxStack [LPPProblem]
@@ -111,13 +120,22 @@ instance BP.ShowStats (BP.Subset Boxes Box) where
       coveragePercent = 100 * (boxesAreaD subset / boxAreaD superset)
 
 instance BP.IsSet Boxes where
-  emptySet = Boxes []
-  setIsEmpty (Boxes boxes) = null boxes
-  setIsEmpty (BoxesUnion union) = List.all BP.setIsEmpty union
-  setUnion bs1 bs2 = BoxesUnion [bs1, bs2]
+  emptySet = Boxes {store = Map.empty, list = BoxesList []}
+  setIsEmpty (Boxes {list}) = boxListIsEmpty list
+    where
+      boxListIsEmpty (BoxesList boxes) = null boxes
+      boxListIsEmpty (BoxesUnion union) = List.all boxListIsEmpty union
+  setUnion bs1 bs2 =
+    Boxes
+      { store = Map.union bs1.store bs2.store,
+        list = BoxesUnion [bs1.list, bs2.list]
+      }
 
 instance BP.BasicSetsToSet Box Boxes where
-  basicSetsToSet = Boxes
+  basicSetsToSet list = Boxes {store, list = BoxesList boxHashes}
+    where
+      store = Map.fromList [(hash box, box) | box <- list]
+      boxHashes = map hash list
 
 instance BP.CanSplitProblem constraint Box where
   splitProblem (BP.Problem {scope, constraint}) =

@@ -7,6 +7,9 @@ module LPPaver2.RealConstraints.Boxes
     mkBox,
     boxAreaD,
     splitBox,
+    BoxHash,
+    BoxStore,
+    BoxesList (..),
     Boxes (..),
     boxesCount,
     boxesAreaD,
@@ -72,22 +75,46 @@ mkBox varDomainsRational =
         rR = (uR - lR) / 2
 
 boxAreaD :: Box -> Double
-boxAreaD (Box {..}) = product (map (double . dyadic . MP.radius) (Map.elems varDomains))
+boxAreaD (Box {..}) =
+  product (map (double . dyadic . MP.radius) (Map.elems varDomains))
 
 {- Collections of boxes. -}
 
-data Boxes
-  = Boxes [Box]
-  | BoxesUnion [Boxes]
-  deriving (P.Eq, Show, Generic)
+type BoxHash = Int
+
+type BoxStore = Map.Map BoxHash Box
+
+boxHAreaD :: BoxStore -> BoxHash -> Double
+boxHAreaD store boxH = case Map.lookup boxH store of
+  Nothing -> double 0 -- Box not found
+  Just box -> boxAreaD box
+
+data BoxesList
+  = BoxesList [BoxHash]
+  | BoxesUnion [BoxesList]
+  deriving (P.Eq, Generic)
+
+data Boxes = Boxes {store :: BoxStore, list :: BoxesList}
+  deriving (Generic)
+
+instance P.Show Boxes where
+  show (Boxes {store, list}) =
+    printf
+      "Boxes(count=%d, area=%.3f)"
+      (boxesCount (Boxes {store, list}))
+      (boxesAreaD (Boxes {store, list}))
 
 boxesCount :: Boxes -> Integer
-boxesCount (Boxes boxes) = length boxes
-boxesCount (BoxesUnion union) = sum (map boxesCount union)
+boxesCount (Boxes {list}) = boxesListCount list
+  where
+    boxesListCount (BoxesList boxes) = length boxes
+    boxesListCount (BoxesUnion union) = sum (map boxesListCount union)
 
 boxesAreaD :: Boxes -> Double
-boxesAreaD (Boxes boxes) = sum (map boxAreaD boxes)
-boxesAreaD (BoxesUnion union) = sum (map boxesAreaD union)
+boxesAreaD (Boxes {store, list}) = boxesListAreaD list
+  where
+    boxesListAreaD (BoxesList boxes) = sum (map (boxHAreaD store) boxes)
+    boxesListAreaD (BoxesUnion union) = sum (map boxesListAreaD union)
 
 splitBox :: Box -> [Box]
 splitBox box = case box.splitOrder of

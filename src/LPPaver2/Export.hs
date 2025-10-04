@@ -21,6 +21,9 @@ instance A.ToJSON MP.MPBall where
 instance A.ToJSON Box where
   toEncoding = A.genericToEncoding A.defaultOptions
 
+instance A.ToJSON BoxesList where
+  toEncoding = A.genericToEncoding A.defaultOptions
+
 instance A.ToJSON Boxes where
   toEncoding = A.genericToEncoding A.defaultOptions
 
