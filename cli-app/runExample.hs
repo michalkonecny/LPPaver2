@@ -217,42 +217,41 @@ stringToBSS = TE.encodeUtf8 . T.pack
 
 instance (MonadIO m, MonadState LPPControlState m) => BP.CanControlSteps m LPPStep where
   reportStep step = do
-    ctrlState <- get
     let boxes = getStepBoxes step
-    -- extract the formulas in the step
-    -- let forms = getStepForms step -- TODO
-    -- TODO: extract expressions from the formulas in the step
+    let exprs = getStepExprs step
+    let forms = getStepForms step
 
+    ctrlState <- get
     -- update Redis with new boxes, formulas, expressions and the step itself
     liftIO $ Redis.runRedis ctrlState.redisDest.connection $ do
-      -- Write any new boxes, formulas and expressions to their Redis hashes
       let newBoxes = Map.difference boxes ctrlState.boxesStore
-      unless (Map.null newBoxes) $ do
-        updateRedisHashStore (boxesListKey ctrlState.redisDest) newBoxes
+      updateRedisHashStore (boxesListKey ctrlState.redisDest) newBoxes
+
+      let newExprs = Map.difference exprs ctrlState.exprsStore
+      updateRedisHashStore (exprsListKey ctrlState.redisDest) newExprs
+
+      let newForms = Map.difference forms ctrlState.formsStore
+      updateRedisHashStore (formsListKey ctrlState.redisDest) newForms
 
       -- Push the step JSON to the Redis list of steps
       let stepJSONBSS = BSL.toStrict $ A.encode step
-      _ <- Redis.rpush (stepsListKey ctrlState.redisDest) [stepJSONBSS]
-      pure ()
+      void $ Redis.rpush (stepsListKey ctrlState.redisDest) [stepJSONBSS]
 
-    -- add the boxes to the box store
+    -- update the control state with the new boxes, formulas and expressions
     let boxesStore = Map.union boxes ctrlState.boxesStore
-    -- add the forms to the form store
-    -- let newFormsStore = Map.union forms controlState.formsStore -- TODO
-    -- add the expressions to the expression store
-    -- let newExprsStore = Map.union exprs controlState.exprsStore -- TODO
-
-    -- put the updated stores back to the monad state
-    put (ctrlState {boxesStore}) -- TODO formsStore, exprsStore})
+    let exprsStore = Map.union exprs ctrlState.exprsStore
+    let formsStore = Map.union forms ctrlState.formsStore
+    put (ctrlState {boxesStore, exprsStore, formsStore})
 
 updateRedisHashStore :: (A.ToJSON a) => BSS.ByteString -> Map.Map Int a -> Redis.Redis ()
-updateRedisHashStore key store = do
-  let entries =
-        [ (stringToBSS (show boxHash), BSL.toStrict $ A.encode box)
-          | (boxHash, box) <- Map.toList store
-        ]
-  _ <- Redis.hmset key entries
-  pure ()
+updateRedisHashStore key store =
+  unless (Map.null store) $ do
+    let entries =
+          [ (stringToBSS (show boxHash), BSL.toStrict $ A.encode box)
+            | (boxHash, box) <- Map.toList store
+          ]
+    _ <- Redis.hmset key entries
+    pure ()
 
 instance (MonadUnliftIO m, Semigroup s) => MonadUnliftIOWithState (StateT s m) where
   type MonadUnliftIOState (StateT s m) = s

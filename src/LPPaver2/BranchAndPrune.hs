@@ -9,6 +9,8 @@ module LPPaver2.BranchAndPrune
     LPPBPParams (..),
     lppBranchAndPrune,
     getStepBoxes,
+    getStepExprs,
+    getStepForms,
   )
 where
 
@@ -42,6 +44,34 @@ getStepBoxes step =
     pavings = BP.getStepPavings step
     pavingsScopes = [p.scope | p <- pavings]
     pavingBoxStore = Map.unions [paving.inner.store `Map.union` paving.outer.store | paving <- pavings]
+
+getStepExprs :: LPPStep -> ExprStore
+getStepExprs step =
+  constraintsStore `Map.union` undecidedStore
+  where
+    constraintsStore = Map.unions [prob.constraint.nodesE | prob <- problems]
+    undecidedStore =
+      Map.unions
+        [ prob.constraint.nodesE
+          | paving <- pavings,
+            prob <- paving.undecided
+        ]
+    problems = BP.getStepProblems step
+    pavings = BP.getStepPavings step
+
+getStepForms :: LPPStep -> FormStore
+getStepForms step =
+  constraintsStore `Map.union` undecidedStore
+  where
+    constraintsStore = Map.unions [prob.constraint.nodesF | prob <- problems]
+    undecidedStore =
+      Map.unions
+        [ prob.constraint.nodesF
+          | paving <- pavings,
+            prob <- paving.undecided
+        ]
+    problems = BP.getStepProblems step
+    pavings = BP.getStepPavings step
 
 type LPPBPResult = BP.Result Form Box Boxes
 
