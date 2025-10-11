@@ -15,7 +15,8 @@ where
 import AERN2.MP (Kleenean (..), MPBall)
 import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
-import Control.Monad.IO.Unlift (MonadUnliftIO)
+import BranchAndPrune.ForkUtils (MonadUnliftIOWithState)
+import Control.Monad.IO.Unlift (MonadIO)
 import Control.Monad.Logger (MonadLogger)
 import Data.Map qualified as Map
 import GHC.Records
@@ -62,7 +63,8 @@ shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
 
 lppBranchAndPrune ::
   ( MonadLogger m,
-    MonadUnliftIO m,
+    MonadIO m,
+    MonadUnliftIOWithState m,
     CanEval r,
     HasKleenanComparison r,
     BP.CanControlSteps m LPPStep

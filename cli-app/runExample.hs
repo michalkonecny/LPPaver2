@@ -11,18 +11,22 @@ import AERN2.MP qualified as MP
 import AERN2.MP.Affine (MPAffine (MPAffine), MPAffineConfig (..))
 import BranchAndPrune.BranchAndPrune (Problem (..), Result (..))
 import BranchAndPrune.BranchAndPrune qualified as BP
-import Control.Monad.IO.Unlift (MonadIO (liftIO), MonadUnliftIO)
-import Control.Monad.Logger (MonadLogger, runStdoutLoggingT)
+import BranchAndPrune.ForkUtils (MonadUnliftIOWithState (..))
+import Control.Monad (unless, void)
+import Control.Monad.IO.Unlift (MonadIO (liftIO), MonadUnliftIO (withRunInIO))
+import Control.Monad.Logger (LoggingT (LoggingT, runLoggingT), MonadLogger, runStdoutLoggingT)
+import Control.Monad.State (MonadState (get, put), StateT (StateT), runStateT)
+import Control.Monad.Trans.Class (lift)
 import Data.Aeson qualified as A
 import Data.ByteString qualified as BSS
 import Data.ByteString.Lazy qualified as BSL
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Maybe (fromJust)
-import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Database.Redis qualified as Redis
+import GHC.Records
 import LPPaver2.BranchAndPrune
 import LPPaver2.Export ()
 import LPPaver2.RealConstraints
@@ -151,58 +155,129 @@ data RedisDestination = RedisDestination
     sessionKeyPrefix :: String
   }
 
--- do-nothing trivial step reporting
-instance (MonadIO m) => BP.CanInitControl m where
-  type ControlResources m = RedisDestination
-  initControl = liftIO $ do
-    -- Initialize Redis connection
-    connection <- Redis.checkedConnect Redis.defaultConnectInfo
-    let sessionKeyPrefix = "LPPaver2:default:"
-    -- Clear any previous session data
-    Redis.runRedis connection $ do
-      _ <- Redis.del [stringToBSS $ sessionKeyPrefix <> "boxes"]
-      _ <- Redis.del [stringToBSS $ sessionKeyPrefix <> "exprs"]
-      _ <- Redis.del [stringToBSS $ sessionKeyPrefix <> "forms"]
-      _ <- Redis.del [stringToBSS $ sessionKeyPrefix <> "steps"]
-      pure ()
-    pure $ RedisDestination {connection, sessionKeyPrefix}
-  finaliseControl _ = pure ()
+defaultRedisDestination :: Redis.Connection -> RedisDestination
+defaultRedisDestination redisConn =
+  RedisDestination
+    { connection = redisConn,
+      sessionKeyPrefix = "lppaver2:default:"
+    }
+
+boxesListKey :: RedisDestination -> BSS.ByteString
+boxesListKey = stringToBSS . (<> "boxes") . sessionKeyPrefix
+
+exprsListKey :: RedisDestination -> BSS.ByteString
+exprsListKey = stringToBSS . (<> "exprs") . sessionKeyPrefix
+
+formsListKey :: RedisDestination -> BSS.ByteString
+formsListKey = stringToBSS . (<> "forms") . sessionKeyPrefix
+
+stepsListKey :: RedisDestination -> BSS.ByteString
+stepsListKey = stringToBSS . (<> "steps") . sessionKeyPrefix
+
+data LPPControlState = LPPControlState
+  { redisDest :: RedisDestination,
+    boxesStore :: BoxStore,
+    exprsStore :: ExprStore,
+    formsStore :: FormStore
+  }
+
+instance Semigroup LPPControlState where
+  s1 <> s2 =
+    LPPControlState
+      { redisDest = s1.redisDest,
+        boxesStore = s1.boxesStore `Map.union` s2.boxesStore,
+        exprsStore = s1.exprsStore `Map.union` s2.exprsStore,
+        formsStore = s1.formsStore `Map.union` s2.formsStore
+      }
+
+defaultLPPControlState :: Redis.Connection -> LPPControlState
+defaultLPPControlState redisConn =
+  LPPControlState
+    { redisDest = defaultRedisDestination redisConn,
+      boxesStore = Map.empty,
+      exprsStore = Map.empty,
+      formsStore = Map.empty
+    }
+
+initControl :: (MonadIO m) => m LPPControlState
+initControl = liftIO $ do
+  -- Initialize Redis connection
+  connection <- Redis.checkedConnect Redis.defaultConnectInfo
+  let ctrlState = defaultLPPControlState connection
+
+  -- Clear any previous session data
+  let keyBuilders = [boxesListKey, exprsListKey, formsListKey, stepsListKey]
+  let keys = map (\f -> f ctrlState.redisDest) keyBuilders
+  Redis.runRedis connection $ do
+    void $ Redis.del keys
+  pure ctrlState
 
 stringToBSS :: String -> BSS.ByteString
 stringToBSS = TE.encodeUtf8 . T.pack
 
-instance (MonadIO m) => BP.CanControlSteps m LPPStep where
-  reportStep (RedisDestination {connection, sessionKeyPrefix}) step =
-    liftIO $ Redis.runRedis connection $ do
-      let boxesListKey = stringToBSS $ sessionKeyPrefix <> "boxes"
-      let stepsListKey = stringToBSS $ sessionKeyPrefix <> "steps"
-      -- Extract boxes, formulas and expressions from the step and write them to Redis hashes
-      -- TODO
-      -- updateRedisHashStore boxesListKey (getStepBoxHashes step)
+instance (MonadIO m, MonadState LPPControlState m) => BP.CanControlSteps m LPPStep where
+  reportStep step = do
+    ctrlState <- get
+    let boxes = getStepBoxes step
+    -- extract the formulas in the step
+    -- let forms = getStepForms step -- TODO
+    -- TODO: extract expressions from the formulas in the step
+
+    -- update Redis with new boxes, formulas, expressions and the step itself
+    liftIO $ Redis.runRedis ctrlState.redisDest.connection $ do
+      -- Write any new boxes, formulas and expressions to their Redis hashes
+      let newBoxes = Map.difference boxes ctrlState.boxesStore
+      unless (Map.null newBoxes) $ do
+        updateRedisHashStore (boxesListKey ctrlState.redisDest) newBoxes
 
       -- Push the step JSON to the Redis list of steps
       let stepJSONBSS = BSL.toStrict $ A.encode step
-      _ <- Redis.rpush stepsListKey [stepJSONBSS]
+      _ <- Redis.rpush (stepsListKey ctrlState.redisDest) [stepJSONBSS]
       pure ()
 
--- updateRedisHashStore :: BSS.ByteString -> BoxStore -> Redis.Redis ()
--- updateRedisHashStore key store = do
---   let entries =
---         [ (stringToBSS (show boxHash), BSL.toStrict $ A.encode box)
---           | (boxHash, box) <- Map.toList store
---         ]
---   _ <- Redis.hset key entries
---   pure ()
+    -- add the boxes to the box store
+    let boxesStore = Map.union boxes ctrlState.boxesStore
+    -- add the forms to the form store
+    -- let newFormsStore = Map.union forms controlState.formsStore -- TODO
+    -- add the expressions to the expression store
+    -- let newExprsStore = Map.union exprs controlState.exprsStore -- TODO
+
+    -- put the updated stores back to the monad state
+    put (ctrlState {boxesStore}) -- TODO formsStore, exprsStore})
+
+updateRedisHashStore :: (A.ToJSON a) => BSS.ByteString -> Map.Map Int a -> Redis.Redis ()
+updateRedisHashStore key store = do
+  let entries =
+        [ (stringToBSS (show boxHash), BSL.toStrict $ A.encode box)
+          | (boxHash, box) <- Map.toList store
+        ]
+  _ <- Redis.hmset key entries
+  pure ()
+
+instance (MonadUnliftIO m, Semigroup s) => MonadUnliftIOWithState (StateT s m) where
+  type MonadUnliftIOState (StateT s m) = s
+  toIOWithState mb = StateT $ \s -> do
+    withRunInIO $ \runInIO -> do
+      let ioWithS = runInIO (mb `runStateT` s)
+      pure (ioWithS, s)
+  absorbState s = StateT $ \s' -> pure ((), s <> s')
+
+instance (Monad m, MonadUnliftIOWithState m) => MonadUnliftIOWithState (LoggingT m) where
+  type MonadUnliftIOState (LoggingT m) = MonadUnliftIOState m
+  toIOWithState lmb = LoggingT $ \loggerFn -> toIOWithState (runLoggingT lmb loggerFn)
+  absorbState s = lift $ absorbState s
 
 mainWithArgs ::
   (CanEval r, HasKleenanComparison r) =>
   r ->
   (LPPProblem, Rational, Int, Bool) ->
   IO ()
-mainWithArgs sampleR (problem, giveUpAccuracy, maxThreads, isVerbose) =
-  runStdoutLoggingT task
+mainWithArgs sampleR (problem, giveUpAccuracy, maxThreads, isVerbose) = do
+  ctrlState <- initControl
+  _ <- runStateT (runStdoutLoggingT task) ctrlState
+  pure ()
   where
-    task :: (MonadLogger m, MonadUnliftIO m) => m ()
+    task :: (MonadLogger m, MonadIO m, MonadUnliftIOWithState m, MonadState LPPControlState m) => m ()
     task = do
       (Result paving _) <-
         lppBranchAndPrune sampleR

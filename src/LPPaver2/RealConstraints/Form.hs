@@ -6,6 +6,7 @@ module LPPaver2.RealConstraints.Form
     lookupFormNode,
     FormHash,
     FormNode,
+    FormStore,
     FormF (..),
     UnaryConn (..),
     BinaryConn (..),
@@ -64,10 +65,12 @@ type FormHash = Int
 
 type FormNode = FormF FormHash
 
+type FormStore = Map.Map FormHash FormNode
+
 data Form = Form
-  { nodesE :: Map.Map ExprHash ExprNode,
-    -- | The map has to include all hashes reachable from the root, except FormTrue and FormFalse
-    nodesF :: Map.Map FormHash FormNode,
+  { nodesE :: ExprStore,
+    -- | The store has to include all hashes reachable from the root, except FormTrue and FormFalse
+    nodesF :: FormStore,
     root :: FormHash
   }
   deriving (Generic, Hashable)

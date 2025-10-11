@@ -9,6 +9,7 @@ module LPPaver2.RealConstraints.Expr
     Expr (..),
     ExprHash,
     ExprNode,
+    ExprStore,
     exprVar,
     exprLit,
   )
@@ -51,6 +52,8 @@ type ExprHash = Int
 
 type ExprNode = ExprF ExprHash
 
+type ExprStore = Map.Map ExprHash ExprNode
+
 -- |
 --  Contains a dictionary indexed by hashes and a root hash that has to exist in the dictionary.
 --
@@ -60,7 +63,7 @@ type ExprNode = ExprF ExprHash
 --  Thus, the expression trees are encoded indirectly and identical sub-expressions are kept only once.
 --
 --  These hashes can be used to efficiently associate any kind of values with the expression nodes.
-data Expr = Expr {nodes :: Map.Map ExprHash ExprNode, root :: ExprHash}
+data Expr = Expr {nodes :: ExprStore, root :: ExprHash}
   deriving (Generic, Hashable)
 
 instance P.Eq Expr where
