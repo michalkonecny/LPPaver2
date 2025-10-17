@@ -8,15 +8,18 @@ module LPPaver2.BranchAndPrune
     LPPBPResult,
     LPPBPParams (..),
     lppBranchAndPrune,
+    getStepBoxes,
+    getStepExprs,
+    getStepForms,
   )
 where
 
 import AERN2.MP (Kleenean (..), MPBall)
 import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
-import Control.Monad.IO.Unlift (MonadUnliftIO)
+import BranchAndPrune.ForkUtils (MonadUnliftIOWithState)
+import Control.Monad.IO.Unlift (MonadIO)
 import Control.Monad.Logger (MonadLogger)
-import Data.List qualified as List
 import Data.Map qualified as Map
 import GHC.Records
 import LPPaver2.RealConstraints
@@ -29,6 +32,47 @@ type LPPPaving = BP.Paving Form Box Boxes
 
 type LPPStep = BP.Step LPPProblem LPPPaving
 
+getStepBoxes :: LPPStep -> BoxStore
+getStepBoxes step =
+  scopesStore `Map.union` pavingBoxStore
+  where
+    scopesStore = boxListToStore $ problemsScopes <> pavingsScopes
+    boxListToStore :: [Box] -> BoxStore
+    boxListToStore boxes = Map.fromList [(box.boxHash, box) | box <- boxes]
+    problems = BP.getStepProblems step
+    problemsScopes = [p.scope | p <- problems]
+    pavings = BP.getStepPavings step
+    pavingsScopes = [p.scope | p <- pavings]
+    pavingBoxStore = Map.unions [paving.inner.store `Map.union` paving.outer.store | paving <- pavings]
+
+getStepExprs :: LPPStep -> ExprStore
+getStepExprs step =
+  constraintsStore `Map.union` undecidedStore
+  where
+    constraintsStore = Map.unions [prob.constraint.nodesE | prob <- problems]
+    undecidedStore =
+      Map.unions
+        [ prob.constraint.nodesE
+          | paving <- pavings,
+            prob <- paving.undecided
+        ]
+    problems = BP.getStepProblems step
+    pavings = BP.getStepPavings step
+
+getStepForms :: LPPStep -> FormStore
+getStepForms step =
+  constraintsStore `Map.union` undecidedStore
+  where
+    constraintsStore = Map.unions [prob.constraint.nodesF | prob <- problems]
+    undecidedStore =
+      Map.unions
+        [ prob.constraint.nodesF
+          | paving <- pavings,
+            prob <- paving.undecided
+        ]
+    problems = BP.getStepProblems step
+    pavings = BP.getStepPavings step
+
 type LPPBPResult = BP.Result Form Box Boxes
 
 data LPPBPParams = LPPBPParams
@@ -39,8 +83,8 @@ data LPPBPParams = LPPBPParams
   }
 
 shouldGiveUpOnBPLPPProblem :: Rational -> LPPProblem -> Bool
-shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope = Box {..}}) =
-  all smallerThanPrec (Map.elems varDomains)
+shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
+  all smallerThanPrec (Map.elems scope.box_.varDomains)
   where
     smallerThanPrec :: MPBall -> Bool
     smallerThanPrec ball = diameter <= giveUpAccuracy
@@ -49,7 +93,8 @@ shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope = Box {..}}) =
 
 lppBranchAndPrune ::
   ( MonadLogger m,
-    MonadUnliftIO m,
+    MonadIO m,
+    MonadUnliftIOWithState m,
     CanEval r,
     HasKleenanComparison r,
     BP.CanControlSteps m LPPStep
@@ -82,9 +127,11 @@ instance
     where
       result = simplifyEvalForm sampleR scope constraint
       simplifiedConstraint = result.evaluatedForm.form
+      mkBoxes box = Boxes {store = Map.fromList [(box.boxHash, box)]}
+      pavingP :: BP.Paving Form Box Boxes
       pavingP = case getFormDecision simplifiedConstraint of
-        CertainTrue -> BP.pavingInner scope (Boxes [scope])
-        CertainFalse -> BP.pavingOuter scope (Boxes [scope])
+        CertainTrue -> BP.pavingInner scope (mkBoxes scope)
+        CertainFalse -> BP.pavingOuter scope (mkBoxes scope)
         _ -> BP.pavingUndecided scope [BP.Problem {scope, constraint = simplifiedConstraint}]
 
 newtype BoxStack = BoxStack [LPPProblem]
@@ -111,13 +158,14 @@ instance BP.ShowStats (BP.Subset Boxes Box) where
       coveragePercent = 100 * (boxesAreaD subset / boxAreaD superset)
 
 instance BP.IsSet Boxes where
-  emptySet = Boxes []
-  setIsEmpty (Boxes boxes) = null boxes
-  setIsEmpty (BoxesUnion union) = List.all BP.setIsEmpty union
-  setUnion bs1 bs2 = BoxesUnion [bs1, bs2]
+  emptySet = Boxes {store = Map.empty}
+  setIsEmpty (Boxes {store}) = Map.null store
+  setUnion bs1 bs2 = Boxes {store = Map.union bs1.store bs2.store}
 
 instance BP.BasicSetsToSet Box Boxes where
-  basicSetsToSet = Boxes
+  basicSetsToSet list = Boxes {store}
+    where
+      store = Map.fromList [(box.boxHash, box) | box <- list]
 
 instance BP.CanSplitProblem constraint Box where
   splitProblem (BP.Problem {scope, constraint}) =

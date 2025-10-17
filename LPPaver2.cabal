@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       LPPaver2.BranchAndPrune
+      LPPaver2.Export
       LPPaver2.RealConstraints
       LPPaver2.RealConstraints.Boxes
       LPPaver2.RealConstraints.Eval
@@ -59,8 +60,10 @@ library
     , hedis
     , mixed-types-num
     , monad-logger
+    , mtl
     , text
     , time
+    , transformers
     , unliftio-core
   default-language: Haskell2010
 
@@ -93,7 +96,9 @@ executable lppaver2-example
     , hedis
     , mixed-types-num
     , monad-logger
+    , mtl
     , text
     , time
+    , transformers
     , unliftio-core
   default-language: Haskell2010

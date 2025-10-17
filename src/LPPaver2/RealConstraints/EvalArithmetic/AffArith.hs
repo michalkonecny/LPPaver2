@@ -3,16 +3,17 @@ module LPPaver2.RealConstraints.EvalArithmetic.AffArith () where
 import AERN2.MP.Affine (MPAffine)
 import AERN2.MP.Affine qualified as Aff
 import Data.Map qualified as Map
-import LPPaver2.RealConstraints.Expr (Var)
-import LPPaver2.RealConstraints.Boxes (Box (..))
+import GHC.Records
+import LPPaver2.RealConstraints.Boxes (Box (..), Box_ (..))
 import LPPaver2.RealConstraints.Eval (CanGetVarDomain (..))
+import LPPaver2.RealConstraints.Expr (Var)
 import Text.Printf (printf)
 import Prelude
 
 boxGetVarDomain :: MPAffine -> Box -> Var -> MPAffine
-boxGetVarDomain sampleAff (Box {varDomains}) var =
-  case Map.lookup var varDomains of
-    Nothing -> error $ printf "variable %s not present in box %s" var (show varDomains)
+boxGetVarDomain sampleAff box var =
+  case Map.lookup var box.box_.varDomains of
+    Nothing -> error $ printf "variable %s not present in box %s" var (show box.box_.varDomains)
     Just dom -> Aff.mpAffineFromBall sampleAff errId dom
   where
     errId = var -- using variable's name as the error variable ID
