@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { storeToRefs } from 'pinia';
-import { computed } from 'vue';
+import { computed, getCurrentInstance, ref, watch } from 'vue';
 import { useStepsStore } from './stepsStore';
 import { getSubProblems, sameProblem, type Problem, type Step } from './steps';
 
@@ -13,6 +13,19 @@ const stepStore = useStepsStore();
 const { focusedProblem, zoomedProblem } = storeToRefs(stepStore);
 
 const step = stepStore.stepFromProblem(props.problem);
+
+const stepTruth = stepStore.getStepTruthResult(step);
+
+const stepTruthNote = computed(() => {
+  switch (stepTruth) {
+    case "true":
+      return "(True)";
+    case "false":
+      return "(False)";
+    default:
+      return "";
+  }
+});
 
 const subProblems = getSubProblems(step);
 
@@ -29,6 +42,10 @@ const classes = computed(() => {
 });
 
 function stepColour(step: Step) {
+  if (step.tag === "GiveUpOnProblemStep") {
+    return "#f0b0f0";
+  }
+
   const truthResult = stepStore.getStepTruthResult(step);
 
   switch (truthResult) {
@@ -41,13 +58,41 @@ function stepColour(step: Step) {
   }
 }
 
+// Focus this problem when clicked
+function focusHere(event: MouseEvent) {
+  focusedProblem.value = props.problem;
+  // prevent event bubbling
+  event.stopPropagation();
+}
+
+// Zoom this problem when double-clicked
+function zoomHere(event: MouseEvent) {
+  zoomedProblem.value = props.problem;
+  // prevent event bubbling
+  event.stopPropagation();
+}
+
+const el = ref<HTMLElement | null>(null);
+
+// Scroll to here when focused
+watch(focusedProblem, (newVal) => {
+  if (sameProblem(newVal, props.problem)) {
+    // Scroll this element into view if not visible
+    const elementTop = el.value?.getBoundingClientRect().top ?? 0;
+    if (elementTop < 0) { // top is above viewport
+      el.value?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'center' });
+    }
+  }
+});
+
 </script>
 
 <template>
-  <table :class="classes" :style="`background-color: ${stepColour(step)};`">
+  <table ref="el" :class="classes" :style="`background-color: ${stepColour(step)};`" @click="focusHere"
+    @dblclick="zoomHere">
     <tr>
       <td colspan="2" class="text-left fw-bold">
-        Step: {{ step.tag }}
+        {{ step.tag }} {{ stepTruthNote }}
       </td>
     </tr>
     <tr v-for="subProblem in subProblems">
