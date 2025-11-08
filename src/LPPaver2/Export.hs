@@ -74,9 +74,10 @@ instance A.ToJSON LPPPaving where
   toJSON = lppPavingToJSON
 
 lppPavingToJSON :: LPPPaving -> A.Value
-lppPavingToJSON (BP.Paving {scope, inner, undecided}) =
+lppPavingToJSON (BP.Paving {scope, inner, outer, undecided}) =
   A.object
     [ "scope" .= scope.boxHash,
       "inner" .= inner,
+      "outer" .= outer,
       "undecided" .= A.listValue lppProblemToJSON undecided
     ]
