@@ -20,6 +20,7 @@ import BranchAndPrune.BranchAndPrune qualified as BP
 import BranchAndPrune.ForkUtils (MonadUnliftIOWithState)
 import Control.Monad.IO.Unlift (MonadIO)
 import Control.Monad.Logger (MonadLogger)
+import Data.Hashable (Hashable (hash))
 import Data.Map qualified as Map
 import GHC.Records
 import LPPaver2.RealConstraints
@@ -61,7 +62,7 @@ getStepExprs step =
 
 getStepForms :: LPPStep -> FormStore
 getStepForms step =
-  constraintsStore `Map.union` undecidedStore
+  constraintsStore `Map.union` undecidedStore `Map.union` basicFormStore
   where
     constraintsStore = Map.unions [prob.constraint.nodesF | prob <- problems]
     undecidedStore =
@@ -72,6 +73,13 @@ getStepForms step =
         ]
     problems = BP.getStepProblems step
     pavings = BP.getStepPavings step
+
+basicFormStore :: FormStore
+basicFormStore =
+  Map.fromList
+    [ (hash (FormTrue :: FormF FormHash), FormTrue),
+      (hash (FormFalse :: FormF FormHash), FormFalse)
+    ]
 
 type LPPBPResult = BP.Result Form Box Boxes
 
