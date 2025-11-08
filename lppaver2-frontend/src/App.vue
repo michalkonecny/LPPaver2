@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useStepsStore } from './steps/stepsStore';
+import StepTree from './steps/StepTree.vue';
 
 const stepStore = useStepsStore()
 stepStore.initSession('default')
@@ -7,9 +8,7 @@ stepStore.initSession('default')
 </script>
 
 <template>
-  <div>
-    You did it!
-  </div>
+  <StepTree />
 </template>
 
 

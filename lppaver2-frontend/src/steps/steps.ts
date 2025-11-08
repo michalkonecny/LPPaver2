@@ -1,7 +1,6 @@
 import type { Var } from "./exprs"
+import type { FormHash } from "./forms"
 
-export type ExprHash = string
-export type FormHash = string
 export type BoxHash = string
 
 // Box types
@@ -21,6 +20,10 @@ export type Box = {
   box_: Box_,
 }
 
+export type Boxes = {
+  boxes: BoxHash[]
+}
+
 // Step types
 
 export type Problem = {
@@ -28,10 +31,21 @@ export type Problem = {
   constraint: FormHash
 }
 
+export type ProblemHash = string
+
+export function problemToProblemHash(problem: { scope: BoxHash, constraint: FormHash }): ProblemHash {
+  return `${problem.scope}|${problem.constraint}`
+}
+
+export function sameProblem(p1: Problem | null, p2: Problem | null): boolean {
+  if (!p1 || !p2) return false;
+  return problemToProblemHash(p1) === problemToProblemHash(p2);
+}
+
 export type Paving = {
   scope: BoxHash,
-  inner: BoxHash[],
-  outer: BoxHash[],
+  inner: Boxes,
+  outer: Boxes,
   undecided: Problem[],
 }
 
@@ -72,4 +86,19 @@ export type AbortStep = {
 
 export type DoneStep = {
   tag: 'DoneStep'
+}
+
+export function getStepProblem(step: Step): Problem | null {
+  return "problem" in step ? step.problem : null;
+}
+
+export function getSubProblems(step: Step): Problem[] {
+  switch (step.tag) {
+    case "PruneStep":
+      return [...step.prunePaving.undecided];
+    case "SplitStep":
+      return [...step.pieces];
+    default:
+      return [];
+  }
 }
