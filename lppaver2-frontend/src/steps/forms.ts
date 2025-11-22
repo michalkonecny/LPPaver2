@@ -44,8 +44,8 @@ export type BinaryComp = 'CompLe' | 'CompLeq' | 'CompEq' | 'CompNeq'
 export type UnaryConn = 'ConnNeg'
 export type BinaryConn = 'ConnAnd' | 'ConnOr' | 'ConnImpl'
 
-export type FormHash = string
-export type FormDict = Record<string, FormF<ExprHash, FormHash>>
+export type FormHash = number
+export type FormDict = Record<FormHash, FormF<ExprHash, FormHash>>
 
 export function formHashToForm(formHash: FormHash, dictF: FormDict, dictE: ExprDict): Form {
   const formF = dictF[formHash];

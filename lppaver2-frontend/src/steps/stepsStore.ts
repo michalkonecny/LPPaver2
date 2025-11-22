@@ -36,10 +36,10 @@ export const useStepsStore = defineStore('steps', {
       // get formTrueHash and formFalseHash from forms
       Object.entries(forms).forEach(([formHash, form]) => {
         if (form.tag === "FormTrue") {
-          this.formTrueHash = formHash
+          this.formTrueHash = Number(formHash)
         }
         if (form.tag === "FormFalse") {
-          this.formFalseHash = formHash
+          this.formFalseHash = Number(formHash)
         }
       });
 
@@ -68,6 +68,9 @@ export const useStepsStore = defineStore('steps', {
     getBox(boxHash: BoxHash): Box {
       const box = this.boxes[boxHash]
       if (!box) {
+        console.log(`this.boxes = `, this.boxes);
+        console.log(`typeof(boxHash) = `, typeof (boxHash));
+
         throw new Error(`Box with hash ${boxHash} not found`)
       }
       return box
@@ -91,13 +94,28 @@ export const useStepsStore = defineStore('steps', {
           if (inner && inner.boxes[0] == stepScope) return "true";
           if (outer && outer.boxes[0] == stepScope) return "false";
           console.log("step", step);
-          
+
           return "unknown";
         default:
           return "unknown";
       }
-    }
+    },
+    getStepColour(step: Step) {
+      if (step.tag === "GiveUpOnProblemStep") {
+        return "#f0b0f0";
+      }
 
+      const truthResult = this.getStepTruthResult(step);
+
+      switch (truthResult) {
+        case "true":
+          return "#e0ffe0";
+        case "false":
+          return "#ffd0e0";
+        default:
+          return "#e0e0ff";
+      }
+    }
   },
   getters: {
   },
@@ -125,12 +143,12 @@ async function fetchWholeHash<ValueType>(sessionRef: string, hashKey: string) {
   // parse the values as ValueType
   const hgetallResult = data.HGETALL as Record<string, string>
   const values = Object.fromEntries(
-    Object.entries(hgetallResult).map(([boxHash, value]: [string, string]) => [
-      boxHash,
+    Object.entries(hgetallResult).map(([valueHash, value]: [string, string]) => [
+      Number(valueHash),
       JSON.parse(value) as ValueType,
     ])
   )
-  return values as Record<string, ValueType>
+  return values as Record<number, ValueType>
 }
 
 async function fetchWholeList<ValueType>(sessionRef: string, listKey: string) {

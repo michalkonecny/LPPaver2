@@ -1,7 +1,7 @@
 import type { Var } from "./exprs"
 import type { FormHash } from "./forms"
 
-export type BoxHash = string
+export type BoxHash = number
 
 // Box types
 

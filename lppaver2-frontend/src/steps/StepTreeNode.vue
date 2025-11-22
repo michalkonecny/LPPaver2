@@ -8,13 +8,13 @@ const props = defineProps<{
   problem: Problem
 }>();
 
-const stepStore = useStepsStore();
+const stepsStore = useStepsStore();
 
-const { focusedProblem, zoomedProblem } = storeToRefs(stepStore);
+const { focusedProblem, zoomedProblem } = storeToRefs(stepsStore);
 
-const step = stepStore.stepFromProblem(props.problem);
+const step = stepsStore.stepFromProblem(props.problem);
 
-const stepTruth = stepStore.getStepTruthResult(step);
+const stepTruth = stepsStore.getStepTruthResult(step);
 
 const stepTruthNote = computed(() => {
   switch (stepTruth) {
@@ -40,23 +40,6 @@ const classes = computed(() => {
     focusedAndZoomed: isFocused.value && isZoomed.value,
   };
 });
-
-function stepColour(step: Step) {
-  if (step.tag === "GiveUpOnProblemStep") {
-    return "#f0b0f0";
-  }
-
-  const truthResult = stepStore.getStepTruthResult(step);
-
-  switch (truthResult) {
-    case "true":
-      return "#e0ffe0";
-    case "false":
-      return "#ffd0e0";
-    default:
-      return "#e0e0ff";
-  }
-}
 
 // Focus this problem when clicked
 function focusHere(event: MouseEvent) {
@@ -88,7 +71,7 @@ watch(focusedProblem, (newVal) => {
 </script>
 
 <template>
-  <table ref="el" :class="classes" :style="`background-color: ${stepColour(step)};`" @click="focusHere"
+  <table ref="el" :class="classes" :style="`background-color: ${stepsStore.getStepColour(step)};`" @click="focusHere"
     @dblclick="zoomHere">
     <tr>
       <td colspan="2" class="text-left fw-bold">

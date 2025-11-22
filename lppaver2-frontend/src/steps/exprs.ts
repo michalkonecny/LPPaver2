@@ -30,8 +30,8 @@ export type ExprBinary<E> = {
 export type UnaryOp = 'OpNeg' | 'OpSqrt' | 'OpSin' | 'OpCos'
 export type BinaryOp = 'OpPlus' | 'OpMinus' | 'OpTimes' | 'OpDivide'
 
-export type ExprHash = string
-export type ExprDict = Record<string, ExprF<ExprHash>>
+export type ExprHash = number
+export type ExprDict = Record<ExprHash, ExprF<ExprHash>>
 
 export function exprHashToExpr(exprHash: ExprHash, dict: ExprDict): Expr {
   const exprF = dict[exprHash];
