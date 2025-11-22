@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 
 import { computed, onMounted, ref, watch } from "vue";
+import { storeToRefs } from "pinia";
 import Plotly from "plotly.js-dist-min";
 
 import { getSubProblems, type Problem } from "@/steps/steps";
@@ -15,7 +16,7 @@ const props = withDefaults(defineProps<{
 });
 
 const stepsStore = useStepsStore();
-// const { boxes, steps } = storeToRefs(stepsStore);
+const { focusedProblem } = storeToRefs(stepsStore);
 
 const plotDiv = ref<HTMLDivElement | null>(null);
 
@@ -58,7 +59,28 @@ function getProblemShapes(problem: Problem | null): Partial<Plotly.Shape>[] {
     opacity: 0.5,
   }
 
-  return [...subProblemShapes, problemShape];
+  return [problemShape, ...subProblemShapes];
+}
+
+function getFocusedProblemOutline(){
+  if (!focusedProblem.value) { return []; }
+
+  const box = stepsStore.getBox(focusedProblem.value.scope);
+  const varDomains = box.box_.varDomains
+  const outline: Partial<Plotly.Shape> = {
+    type: "rect",
+    x0: varDomains[xVar.value]?.l ?? 0,
+    x1: varDomains[xVar.value]?.u ?? 0,
+    y0: varDomains[yVar.value]?.l ?? 0,
+    y1: varDomains[yVar.value]?.u ?? 0,
+    line: {
+      color: "red",
+      width: 3
+    },
+    fillcolor: "rgba(0,0,0,0)", // transparent fill
+  }
+
+  return [outline];
 }
 
 function getAxisLayout(v: Var): Partial<Plotly.LayoutAxis> {
@@ -75,7 +97,7 @@ const layout = computed(() => ({
   xaxis: getAxisLayout(xVar.value),
   yaxis: getAxisLayout(yVar.value),
   margin: { t: 20, b: 40, l: 40, r: 20 },
-  shapes: getProblemShapes(props.topProblem),
+  shapes: [...getProblemShapes(props.topProblem), ...getFocusedProblemOutline()],
 }));
 
 function renderPlot() {
@@ -85,7 +107,7 @@ function renderPlot() {
 }
 
 onMounted(() => {
-  watch([plotDiv, () => props.topProblem, xVar, yVar], renderPlot, { immediate: true });
+  watch([plotDiv, () => props.topProblem, xVar, yVar, focusedProblem], renderPlot, { immediate: true });
 });
 
 

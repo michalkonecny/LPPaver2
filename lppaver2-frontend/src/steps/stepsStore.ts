@@ -57,6 +57,7 @@ export const useStepsStore = defineStore('steps', {
       });
 
       this.rootProblem = steps[0] ? getStepProblem(steps[0]) : null;
+      this.zoomedProblem = this.rootProblem;
       this.focusedProblem = this.rootProblem;
     },
     getExpr(exprHash: ExprHash): Expr {
