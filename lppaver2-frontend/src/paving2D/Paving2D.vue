@@ -18,7 +18,7 @@ const props = withDefaults(defineProps<{
 const stepsStore = useStepsStore();
 const { focusedProblem } = storeToRefs(stepsStore);
 
-const plotDiv = ref<HTMLDivElement | null>(null);
+const plotDiv = ref<Plotly.PlotlyHTMLElement | null>(null);
 
 const topScopeH = computed(() => props.topProblem?.scope ?? null);
 const topScopeBox = computed(() => !topScopeH.value ? null : stepsStore.getBox(topScopeH.value).box_);
@@ -62,7 +62,7 @@ function getProblemShapes(problem: Problem | null): Partial<Plotly.Shape>[] {
   return [problemShape, ...subProblemShapes];
 }
 
-function getFocusedProblemOutline(){
+function getFocusedProblemOutline() {
   if (!focusedProblem.value) { return []; }
 
   const box = stepsStore.getBox(focusedProblem.value.scope);
@@ -104,6 +104,35 @@ function renderPlot() {
   if (!plotDiv.value) { return; }
 
   Plotly.react(plotDiv.value, [{ x: [], y: [] }], layout.value, { displayModeBar: false, responsive: true });
+
+  // add a Plotly mouse click event handler
+  if (plotDiv.value) {
+    // TODO: Check if handler already attacher or remove previous handlers to avoid duplicates
+    // TODO: Switch to normal onclick instead of plotly_click as plotly propagates this event only for data, not shapes
+    plotDiv.value.on('plotly_click', (data) => {
+      // Plotly doesn't natively support click events on layout shapes directly in the same way as points.
+      // However, we can use the coordinates of the click to find the smallest containing box.
+      
+      // data.event is the original mouse event
+      // But data.points is usually empty for shape clicks unless we have dummy points.
+      
+      // A better approach for shapes is often checking intersection manually or using annotations.
+      // But since we just need to identify the problem, let's try to find the problem corresponding to the click coordinates.
+      
+      const xaxis = (plotDiv.value as any).layout.xaxis;
+      const yaxis = (plotDiv.value as any).layout.yaxis;
+      
+      // Get click coordinates in data space
+      // Note: This relies on the event structure from Plotly
+      // @ts-ignore
+      const clickX = xaxis.p2c(data.event.x - (plotDiv.value as any).getBoundingClientRect().left - (plotDiv.value as any).layout.margin.l);
+      // @ts-ignore
+      const clickY = yaxis.p2c(data.event.y - (plotDiv.value as any).getBoundingClientRect().top - (plotDiv.value as any).layout.margin.t);
+
+      // TODO: Implement logic to find the smallest problem box containing (clickX, clickY)
+      console.log("Clicked at", clickX, clickY);
+    });
+  }
 }
 
 onMounted(() => {
