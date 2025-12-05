@@ -24,6 +24,8 @@ dependencies:
 - containers
 - hashable
 - monad-logger
+- transformers
+- mtl
 - bytestring
 - text
 - time

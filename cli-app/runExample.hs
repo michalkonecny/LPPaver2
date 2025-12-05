@@ -11,12 +11,24 @@ import AERN2.MP qualified as MP
 import AERN2.MP.Affine (MPAffine (MPAffine), MPAffineConfig (..))
 import BranchAndPrune.BranchAndPrune (Problem (..), Result (..))
 import BranchAndPrune.BranchAndPrune qualified as BP
-import Control.Monad.IO.Unlift (MonadIO (liftIO), MonadUnliftIO)
-import Control.Monad.Logger (MonadLogger, runStdoutLoggingT)
+import BranchAndPrune.ForkUtils (MonadUnliftIOWithState (..))
+import Control.Monad (unless, void)
+import Control.Monad.IO.Unlift (MonadIO (liftIO), MonadUnliftIO (withRunInIO))
+import Control.Monad.Logger (LoggingT (LoggingT, runLoggingT), MonadLogger, runStdoutLoggingT)
+import Control.Monad.State (MonadState (get, put), StateT (StateT), runStateT)
+import Control.Monad.Trans.Class (lift)
+import Data.Aeson qualified as A
+import Data.ByteString qualified as BSS
+import Data.ByteString.Lazy qualified as BSL
 import Data.List qualified as List
 import Data.Map qualified as Map
 import Data.Maybe (fromJust)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
+import Database.Redis qualified as Redis
+import GHC.Records
 import LPPaver2.BranchAndPrune
+import LPPaver2.Export ()
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
 import System.Environment (getArgs)
@@ -138,24 +150,133 @@ main = do
     _ ->
       error $ "unknown arithmetic: " ++ arith
 
--- do-nothing trivial step reporting
-instance (MonadIO m) => BP.CanInitControl m where
-  type ControlResources m = ()
-  initControl = pure ()
-  finaliseControl _ = pure ()
+data RedisDestination = RedisDestination
+  { connection :: Redis.Connection,
+    sessionKeyPrefix :: String
+  }
 
-instance (MonadIO m) => BP.CanControlSteps m step where
-  reportStep _ _ = pure ()
+defaultRedisDestination :: Redis.Connection -> RedisDestination
+defaultRedisDestination redisConn =
+  RedisDestination
+    { connection = redisConn,
+      sessionKeyPrefix = "lppaver2:default:"
+    }
+
+boxesListKey :: RedisDestination -> BSS.ByteString
+boxesListKey = stringToBSS . (<> "boxes") . sessionKeyPrefix
+
+exprsListKey :: RedisDestination -> BSS.ByteString
+exprsListKey = stringToBSS . (<> "exprs") . sessionKeyPrefix
+
+formsListKey :: RedisDestination -> BSS.ByteString
+formsListKey = stringToBSS . (<> "forms") . sessionKeyPrefix
+
+stepsListKey :: RedisDestination -> BSS.ByteString
+stepsListKey = stringToBSS . (<> "steps") . sessionKeyPrefix
+
+data LPPControlState = LPPControlState
+  { redisDest :: RedisDestination,
+    boxesStore :: BoxStore,
+    exprsStore :: ExprStore,
+    formsStore :: FormStore
+  }
+
+instance Semigroup LPPControlState where
+  s1 <> s2 =
+    LPPControlState
+      { redisDest = s1.redisDest,
+        boxesStore = s1.boxesStore `Map.union` s2.boxesStore,
+        exprsStore = s1.exprsStore `Map.union` s2.exprsStore,
+        formsStore = s1.formsStore `Map.union` s2.formsStore
+      }
+
+defaultLPPControlState :: Redis.Connection -> LPPControlState
+defaultLPPControlState redisConn =
+  LPPControlState
+    { redisDest = defaultRedisDestination redisConn,
+      boxesStore = Map.empty,
+      exprsStore = Map.empty,
+      formsStore = Map.empty
+    }
+
+initControl :: (MonadIO m) => m LPPControlState
+initControl = liftIO $ do
+  -- Initialize Redis connection
+  connection <- Redis.checkedConnect Redis.defaultConnectInfo
+  let ctrlState = defaultLPPControlState connection
+
+  -- Clear any previous session data
+  let keyBuilders = [boxesListKey, exprsListKey, formsListKey, stepsListKey]
+  let keys = map (\f -> f ctrlState.redisDest) keyBuilders
+  Redis.runRedis connection $ do
+    void $ Redis.del keys
+  pure ctrlState
+
+stringToBSS :: String -> BSS.ByteString
+stringToBSS = TE.encodeUtf8 . T.pack
+
+instance (MonadIO m, MonadState LPPControlState m) => BP.CanControlSteps m LPPStep where
+  reportStep step = do
+    let boxes = getStepBoxes step
+    let exprs = getStepExprs step
+    let forms = getStepForms step
+
+    ctrlState <- get
+    -- update Redis with new boxes, formulas, expressions and the step itself
+    liftIO $ Redis.runRedis ctrlState.redisDest.connection $ do
+      let newBoxes = Map.difference boxes ctrlState.boxesStore
+      updateRedisHashStore (boxesListKey ctrlState.redisDest) newBoxes
+
+      let newExprs = Map.difference exprs ctrlState.exprsStore
+      updateRedisHashStore (exprsListKey ctrlState.redisDest) newExprs
+
+      let newForms = Map.difference forms ctrlState.formsStore
+      updateRedisHashStore (formsListKey ctrlState.redisDest) newForms
+
+      -- Push the step JSON to the Redis list of steps
+      let stepJSONBSS = BSL.toStrict $ A.encode step
+      void $ Redis.rpush (stepsListKey ctrlState.redisDest) [stepJSONBSS]
+
+    -- update the control state with the new boxes, formulas and expressions
+    let boxesStore = Map.union boxes ctrlState.boxesStore
+    let exprsStore = Map.union exprs ctrlState.exprsStore
+    let formsStore = Map.union forms ctrlState.formsStore
+    put (ctrlState {boxesStore, exprsStore, formsStore})
+
+updateRedisHashStore :: (A.ToJSON a) => BSS.ByteString -> Map.Map Int a -> Redis.Redis ()
+updateRedisHashStore key store =
+  unless (Map.null store) $ do
+    let entries =
+          [ (stringToBSS (show boxHash), BSL.toStrict $ A.encode box)
+            | (boxHash, box) <- Map.toList store
+          ]
+    _ <- Redis.hmset key entries
+    pure ()
+
+instance (MonadUnliftIO m, Semigroup s) => MonadUnliftIOWithState (StateT s m) where
+  type MonadUnliftIOState (StateT s m) = s
+  toIOWithState mb = StateT $ \s -> do
+    withRunInIO $ \runInIO -> do
+      let ioWithS = runInIO (mb `runStateT` s)
+      pure (ioWithS, s)
+  absorbState s = StateT $ \s' -> pure ((), s <> s')
+
+instance (Monad m, MonadUnliftIOWithState m) => MonadUnliftIOWithState (LoggingT m) where
+  type MonadUnliftIOState (LoggingT m) = MonadUnliftIOState m
+  toIOWithState lmb = LoggingT $ \loggerFn -> toIOWithState (runLoggingT lmb loggerFn)
+  absorbState s = lift $ absorbState s
 
 mainWithArgs ::
   (CanEval r, HasKleenanComparison r) =>
   r ->
   (LPPProblem, Rational, Int, Bool) ->
   IO ()
-mainWithArgs sampleR (problem, giveUpAccuracy, maxThreads, isVerbose) =
-  runStdoutLoggingT task
+mainWithArgs sampleR (problem, giveUpAccuracy, maxThreads, isVerbose) = do
+  ctrlState <- initControl
+  _ <- runStateT (runStdoutLoggingT task) ctrlState
+  pure ()
   where
-    task :: (MonadLogger m, MonadUnliftIO m) => m ()
+    task :: (MonadLogger m, MonadIO m, MonadUnliftIOWithState m, MonadState LPPControlState m) => m ()
     task = do
       (Result paving _) <-
         lppBranchAndPrune sampleR
