@@ -1,8 +1,8 @@
 <script lang="ts" setup>
 import { storeToRefs } from 'pinia';
-import { computed, getCurrentInstance, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useStepsStore } from './stepsStore';
-import { getSubProblems, sameProblem, type Problem, type Step } from './steps';
+import { getSubProblems, sameProblem, type Problem } from './steps';
 
 const props = defineProps<{
   problem: Problem
@@ -60,11 +60,8 @@ const el = ref<HTMLElement | null>(null);
 // Scroll to here when focused
 watch(focusedProblem, (newVal) => {
   if (sameProblem(newVal, props.problem)) {
-    // Scroll this element into view if not visible
-    const elementTop = el.value?.getBoundingClientRect().top ?? 0;
-    if (elementTop < 0) { // top is above viewport
-      el.value?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'center' });
-    }
+    // Scroll this element into view
+    el.value?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'center' });
   }
 });
 

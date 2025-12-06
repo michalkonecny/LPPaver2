@@ -44,11 +44,14 @@ function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
 
   // get this problem's box shape
   const box = stepsStore.getBox(problem.scope);
+  const constraint = stepsStore.getForm(problem.constraint);
   const varDomains = box.box_.varDomains;
   const x0 = varDomains[xVar.value]?.l ?? 0;
   const x1 = varDomains[xVar.value]?.u ?? 0;
   const y0 = varDomains[yVar.value]?.l ?? 0;
   const y1 = varDomains[yVar.value]?.u ?? 0;
+
+  const boxDescr = `${xVar.value}:[${x0}, ${x1}]<br>${yVar.value}:[${y0}, ${y1}]`;
 
   const problemLineTrace: Partial<Plotly.Data> = {
     type: "scatter",
@@ -63,6 +66,9 @@ function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
     fillcolor: stepsStore.getStepColour(step),
     opacity: 0.5,
     showlegend: false,
+    customdata: [problem.scope, problem.constraint],
+    text: boxDescr,
+    hoverinfo: "text",
   }
 
   return [problemLineTrace, ...subProblemTraces];
@@ -108,6 +114,8 @@ const layout = computed<Partial<Plotly.Layout>>(() => ({
   dragmode: "pan",
 }));
 
+let handlerAttached = false;
+
 function renderPlot() {
   if (!plotDiv.value) { return; }
 
@@ -119,10 +127,16 @@ function renderPlot() {
     });
 
   // add a Plotly mouse click event handler
-  if (plotDiv.value) {
-    // TODO: Check if handler already attached or remove previous handlers to avoid duplicates
+  if (plotDiv.value && !handlerAttached) {
+    handlerAttached = true;
     plotDiv.value.on('plotly_click', (data) => {
       console.log('Plotly click event data:', data);
+      const point = data.points[0];
+      const scope = point?.data.customdata[0] as number | undefined;
+      const constraint = point?.data.customdata[1] as number | undefined;
+      if (scope && constraint) {
+        focusedProblem.value = { scope, constraint };
+      }
     });
   }
 }
