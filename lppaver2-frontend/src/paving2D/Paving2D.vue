@@ -33,33 +33,45 @@ watch(topScopeVars, vars => {
   yVar.value = vars[1] ?? "_y"
 })
 
-function getProblemShapes(problem: Problem | null): Partial<Plotly.Shape>[] {
+function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
   if (!problem) { return []; }
 
   const step = stepsStore.stepFromProblem(problem);
 
   // recursively get subproblem shapes
   const subProblems = getSubProblems(step);
-  const subProblemShapes: Partial<Plotly.Shape>[] = subProblems.flatMap(getProblemShapes);
+  const subProblemTraces: Partial<Plotly.Data>[] = subProblems.flatMap(getProblemTraces);
 
   // get this problem's box shape
   const box = stepsStore.getBox(problem.scope);
-  const varDomains = box.box_.varDomains
-  const problemShape: Partial<Plotly.Shape> = {
-    type: "rect",
-    x0: varDomains[xVar.value]?.l ?? 0,
-    x1: varDomains[xVar.value]?.u ?? 0,
-    y0: varDomains[yVar.value]?.l ?? 0,
-    y1: varDomains[yVar.value]?.u ?? 0,
+  const constraint = stepsStore.getForm(problem.constraint);
+  const varDomains = box.box_.varDomains;
+  const x0 = varDomains[xVar.value]?.l ?? 0;
+  const x1 = varDomains[xVar.value]?.u ?? 0;
+  const y0 = varDomains[yVar.value]?.l ?? 0;
+  const y1 = varDomains[yVar.value]?.u ?? 0;
+
+  const boxDescr = `${xVar.value}:[${x0}, ${x1}]<br>${yVar.value}:[${y0}, ${y1}]`;
+
+  const problemLineTrace: Partial<Plotly.Data> = {
+    type: "scatter",
+    x: [x0, x1, x1, x0, x0],
+    y: [y0, y0, y1, y1, y0],
+    mode: "lines",
+    fill: "toself",
     line: {
       color: "black",
       width: 1
     },
     fillcolor: stepsStore.getStepColour(step),
     opacity: 0.5,
+    showlegend: false,
+    customdata: [problem.scope, problem.constraint],
+    text: boxDescr,
+    hoverinfo: "text",
   }
 
-  return [problemShape, ...subProblemShapes];
+  return [problemLineTrace, ...subProblemTraces];
 }
 
 function getFocusedProblemOutline() {
@@ -78,6 +90,7 @@ function getFocusedProblemOutline() {
       width: 3
     },
     fillcolor: "rgba(0,0,0,0)", // transparent fill
+    showlegend: false,
   }
 
   return [outline];
@@ -91,46 +104,39 @@ function getAxisLayout(v: Var): Partial<Plotly.LayoutAxis> {
   };
 };
 
-const layout = computed(() => ({
+const layout = computed<Partial<Plotly.Layout>>(() => ({
   autosize: true,
   uirevision: -1,
   xaxis: getAxisLayout(xVar.value),
   yaxis: getAxisLayout(yVar.value),
   margin: { t: 20, b: 40, l: 40, r: 20 },
-  shapes: [...getProblemShapes(props.topProblem), ...getFocusedProblemOutline()],
+  shapes: [...getFocusedProblemOutline()],
+  dragmode: "pan",
 }));
+
+let handlerAttached = false;
 
 function renderPlot() {
   if (!plotDiv.value) { return; }
 
-  Plotly.react(plotDiv.value, [{ x: [], y: [] }], layout.value, { displayModeBar: false, responsive: true });
+  Plotly.react(plotDiv.value, getProblemTraces(props.topProblem), layout.value,
+    {
+      displayModeBar: true,
+      responsive: true,
+      scrollZoom: true,
+    });
 
   // add a Plotly mouse click event handler
-  if (plotDiv.value) {
-    // TODO: Check if handler already attacher or remove previous handlers to avoid duplicates
-    // TODO: Switch to normal onclick instead of plotly_click as plotly propagates this event only for data, not shapes
+  if (plotDiv.value && !handlerAttached) {
+    handlerAttached = true;
     plotDiv.value.on('plotly_click', (data) => {
-      // Plotly doesn't natively support click events on layout shapes directly in the same way as points.
-      // However, we can use the coordinates of the click to find the smallest containing box.
-      
-      // data.event is the original mouse event
-      // But data.points is usually empty for shape clicks unless we have dummy points.
-      
-      // A better approach for shapes is often checking intersection manually or using annotations.
-      // But since we just need to identify the problem, let's try to find the problem corresponding to the click coordinates.
-      
-      const xaxis = (plotDiv.value as any).layout.xaxis;
-      const yaxis = (plotDiv.value as any).layout.yaxis;
-      
-      // Get click coordinates in data space
-      // Note: This relies on the event structure from Plotly
-      // @ts-ignore
-      const clickX = xaxis.p2c(data.event.x - (plotDiv.value as any).getBoundingClientRect().left - (plotDiv.value as any).layout.margin.l);
-      // @ts-ignore
-      const clickY = yaxis.p2c(data.event.y - (plotDiv.value as any).getBoundingClientRect().top - (plotDiv.value as any).layout.margin.t);
-
-      // TODO: Implement logic to find the smallest problem box containing (clickX, clickY)
-      console.log("Clicked at", clickX, clickY);
+      console.log('Plotly click event data:', data);
+      const point = data.points[0];
+      const scope = point?.data.customdata[0] as number | undefined;
+      const constraint = point?.data.customdata[1] as number | undefined;
+      if (scope && constraint) {
+        focusedProblem.value = { scope, constraint };
+      }
     });
   }
 }
