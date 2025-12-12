@@ -70,16 +70,18 @@ watch(focusedProblem, (newVal) => {
 <template>
   <table ref="el" :class="classes" :style="`background-color: ${stepsStore.getStepColour(step)};`" @click="focusHere"
     @dblclick="zoomHere">
-    <tr>
-      <td colspan="2" class="text-left fw-bold">
-        {{ step.tag }} {{ stepTruthNote }}
-      </td>
-    </tr>
-    <tr v-for="subProblem in subProblems">
-      <td class="text-center" style="width: 15px; vertical-align: top; color: midnightblue;">↳</td>
-      <td>
-        <StepTreeNode :problem="subProblem" />
-      </td>
-    </tr>
+    <tbody>
+      <tr>
+        <td colspan="2" class="text-left fw-bold">
+          {{ step.tag }} {{ stepTruthNote }}
+        </td>
+      </tr>
+      <tr v-for="subProblem in subProblems">
+        <td class="text-center" style="width: 15px; vertical-align: top; color: midnightblue;">↳</td>
+        <td>
+          <StepTreeNode :problem="subProblem" />
+        </td>
+      </tr>
+    </tbody>
   </table>
 </template>
