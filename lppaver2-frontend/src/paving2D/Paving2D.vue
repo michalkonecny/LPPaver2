@@ -6,7 +6,7 @@ import Plotly from "plotly.js-dist-min";
 
 import { getSubProblems, type Problem } from "@/steps/steps";
 import { useStepsStore } from "@/steps/stepsStore";
-import type { Var } from "@/steps/exprs";
+import type { Var } from "@/formulas/exprs";
 
 const props = withDefaults(defineProps<{
   topProblem: Problem | null;

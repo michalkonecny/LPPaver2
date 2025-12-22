@@ -1,5 +1,5 @@
-import type { Var } from "./exprs"
-import type { FormHash } from "./forms"
+import type { Var } from "../formulas/exprs"
+import type { FormHash } from "../formulas/forms"
 
 export type BoxHash = number
 

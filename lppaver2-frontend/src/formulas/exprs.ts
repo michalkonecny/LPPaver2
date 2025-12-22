@@ -9,9 +9,14 @@ export type ExprVar = {
   var: Var
 }
 
+export type RationalLit = {
+  numerator: number,
+  denominator: number
+}
+
 export type ExprLit = {
   tag: 'ExprLit',
-  lit: number
+  lit: RationalLit
 }
 
 export type ExprUnary<E> = {
@@ -29,6 +34,20 @@ export type ExprBinary<E> = {
 
 export type UnaryOp = 'OpNeg' | 'OpSqrt' | 'OpSin' | 'OpCos'
 export type BinaryOp = 'OpPlus' | 'OpMinus' | 'OpTimes' | 'OpDivide'
+
+export const unaryOpSymbolMap: Record<UnaryOp, string> = {
+  'OpNeg': '-',
+  'OpSqrt': '√',
+  'OpSin': 'sin',
+  'OpCos': 'cos'
+}
+
+export const binaryOpSymbolMap: Record<BinaryOp, string> = {
+  'OpPlus': '+',
+  'OpMinus': '-',
+  'OpTimes': '*',
+  'OpDivide': '/'
+}
 
 export type ExprHash = number
 export type ExprDict = Record<ExprHash, ExprF<ExprHash>>

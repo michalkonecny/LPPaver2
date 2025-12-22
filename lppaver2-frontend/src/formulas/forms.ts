@@ -2,7 +2,7 @@ import { exprHashToExpr, type Expr, type ExprDict, type ExprHash } from "./exprs
 
 export type Form = { f: FormF<Expr, Form> }
 
-export type FormF<E,F> = FormComp<E> | FormUnary<F> | FormBinary<F>
+export type FormF<E, F> = FormComp<E> | FormUnary<F> | FormBinary<F>
   | FormIfThenElse<F> | FormTrue | FormFalse
 
 export type FormComp<E> = {
@@ -43,6 +43,23 @@ export type FormFalse = {
 export type BinaryComp = 'CompLe' | 'CompLeq' | 'CompEq' | 'CompNeq'
 export type UnaryConn = 'ConnNeg'
 export type BinaryConn = 'ConnAnd' | 'ConnOr' | 'ConnImpl'
+
+export const binaryCompSymbolMap: Record<BinaryComp, string> = {
+  'CompLe': '<',
+  'CompLeq': '≤',
+  'CompEq': '=',
+  'CompNeq': '≠'
+}
+
+export const unaryConnSymbolMap: Record<UnaryConn, string> = {
+  'ConnNeg': '¬'
+}
+
+export const binaryConnSymbolMap: Record<BinaryConn, string> = {
+  'ConnAnd': '∧',
+  'ConnOr': '∨',
+  'ConnImpl': '→'
+}
 
 export type FormHash = number
 export type FormDict = Record<FormHash, FormF<ExprHash, FormHash>>

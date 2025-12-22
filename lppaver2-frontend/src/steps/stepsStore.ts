@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { getStepProblem, problemToProblemHash, type Box, type BoxHash, type Problem, type ProblemHash, type Step } from './steps'
-import { type ExprHash, type Expr, type ExprF, exprHashToExpr } from './exprs'
-import { formHashToForm, type Form, type FormF, type FormHash } from './forms'
+import { type ExprHash, type Expr, type ExprF, exprHashToExpr } from '../formulas/exprs'
+import { formHashToForm, type Form, type FormF, type FormHash } from '../formulas/forms'
 
 export const useStepsStore = defineStore('steps', {
   state: () => ({
