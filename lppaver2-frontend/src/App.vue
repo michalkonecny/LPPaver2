@@ -33,7 +33,7 @@ const topForm = computed(() => {
       </tr>
       <tr>
         <td style="width: calc(100% - 520px);">
-          <FormattedForm :form="topForm" />
+          <FormattedForm :form="topForm" :widthLimit="60" />
         </td>
       </tr>
     </tbody>

@@ -1,10 +1,216 @@
 <script lang="ts" setup>
 import { binaryCompSymbolMap, binaryConnSymbolMap, unaryConnSymbolMap, type Form } from './forms';
 import FormattedExpr from './FormattedExpr.vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
   form?: Form;
+  widthLimit: number;
 }>();
+
+const emits = defineEmits<{
+  (e: 'width', width: number): void;
+}>();
+
+function emitWidth(width: number) {
+  emits('width', width);
+}
+
+function emitWidthFromString(result: string) {
+  emitWidth(result.length);
+  return result;
+}
+
+////////////////////////////
+// for binary comparisons
+////////////////////////////
+
+const binaryCompSymbol = computed(() => {
+  return props.form && props.form.f.tag === 'FormComp'
+    ? binaryCompSymbolMap[props.form.f.comp]
+    : '';
+});
+
+const binaryCompChildWidthLimit = computed(() => {
+  // assuming horizontal layout (worst case)
+  return props.widthLimit - 1; // 1 for space
+});
+
+const e1Width = ref<number | null>(null);
+const e2Width = ref<number | null>(null);
+
+function setE1Width(w: number) { e1Width.value = w; }
+function setE2Width(w: number) { e2Width.value = w; }
+
+const binaryCompTotalWidthIfHorizontal = computed(() => {
+  if (e1Width.value === null || e2Width.value === null) {
+    return 0;
+  }
+  return e1Width.value + e2Width.value + binaryCompSymbol.value.length + 2; // 2 for spaces
+});
+
+const binaryCompTotalWidthIfVertical = computed(() => {
+  if (e1Width.value === null || e2Width.value === null) {
+    return 0;
+  }
+  return Math.max(e1Width.value!, e2Width.value!) + 1; // 1 for space
+});
+
+const binaryCompFitsHorizontal = computed(() => {
+  return binaryCompTotalWidthIfHorizontal.value <= props.widthLimit;
+});
+
+// when both e1Width and e2Width are set, emit total width
+watch(binaryCompTotalWidthIfHorizontal, w => {
+  // binary comparison, both children's widths are needed
+  if (props.form?.f.tag === 'FormComp') {
+    if (e1Width.value !== null && e2Width.value !== null) {
+      if (binaryCompFitsHorizontal.value) {
+        // enough horizontal space, using horizontal layout
+        emitWidth(binaryCompTotalWidthIfHorizontal.value);
+      } else {
+        // not enough horizontal space, using vertical layout
+        emitWidth(binaryCompTotalWidthIfVertical.value);
+      }
+    }
+  }
+});
+
+////////////////////////////
+// for unary logical connectors
+////////////////////////////
+
+const unaryConnSymbol = computed(() => {
+  return props.form && props.form.f.tag === 'FormUnary'
+    ? unaryConnSymbolMap[props.form.f.uconn]
+    : '';
+});
+
+const unaryChildWidthLimit = computed(() => {
+  return props.widthLimit - 1 - unaryConnSymbol.value.length;
+});
+
+const fWidth = ref<number | null>(null);
+
+function setFWidth(w: number) { fWidth.value = w; }
+
+const unaryTotalWidth = computed(() => {
+  return unaryConnSymbol.value.length + 1 + (fWidth.value ?? 0); // 1 for space
+});
+
+// when fWidth is set, emit total width
+watch(unaryTotalWidth, w => {
+  if (props.form?.f.tag == 'FormUnary' && fWidth.value !== null) {
+    emitWidth(w);
+  }
+});
+
+////////////////////////////
+// for binary logical connectors
+////////////////////////////
+
+const binaryConnSymbol = computed(() => {
+  return props.form && props.form.f.tag === 'FormBinary'
+    ? binaryConnSymbolMap[props.form.f.bconn]
+    : '';
+});
+
+const binaryChildWidthLimit = computed(() => {
+  // assuming horizontal layout (worst case)
+  return props.widthLimit - 1; // 1 for space
+});
+
+const f1Width = ref<number | null>(null);
+const f2Width = ref<number | null>(null);
+
+function setF1Width(w: number) { f1Width.value = w; }
+function setF2Width(w: number) { f2Width.value = w; }
+
+const binaryConnTotalWidthIfHorizontal = computed(() => {
+  if (f1Width.value === null || f2Width.value === null) {
+    return 0;
+  }
+  return f1Width.value + f2Width.value + binaryConnSymbol.value.length + 2; // 2 for spaces
+});
+
+const binaryConnFitsHorizontal = computed(() => {
+  return binaryConnTotalWidthIfHorizontal.value <= props.widthLimit;
+});
+
+const binaryConnTotalWidthIfVertical = computed(() => {
+  if (f1Width.value === null || f2Width.value === null) {
+    return 0;
+  }
+  return Math.max(f1Width.value, f2Width.value) + 1; // 1 for space
+});
+
+// when both f1Width and f2Width are set, emit total width
+watch(binaryConnTotalWidthIfHorizontal, w => {
+  // binary formula, both children's widths are needed
+  if (props.form?.f.tag === 'FormBinary') {
+    if (f1Width.value !== null && f2Width.value !== null) {
+      if (binaryConnFitsHorizontal.value) {
+        // enough horizontal space, using horizontal layout
+        emitWidth(binaryConnTotalWidthIfHorizontal.value);
+      } else {
+        // not enough horizontal space, using vertical layout
+        emitWidth(binaryConnTotalWidthIfVertical.value);
+      }
+    }
+  }
+});
+
+////////////////////////////
+// for if-then-else formulas
+////////////////////////////
+
+const iteChildWidthLimit = computed(() => {
+  // assuming horizontal layout (worst case)
+  return props.widthLimit - 1; // 1 for space
+});
+
+const fcWidth = ref<number | null>(null);
+const ftWidth = ref<number | null>(null);
+const ffWidth = ref<number | null>(null);
+
+function setFcWidth(w: number) { fcWidth.value = w; }
+function setFtWidth(w: number) { ftWidth.value = w; }
+function setFfWidth(w: number) { ffWidth.value = w; }
+
+const iteTotalWidthIfHorizontal = computed(() => {
+  if (fcWidth.value === null || ftWidth.value === null || ffWidth.value === null) {
+    return 0;
+  }
+  return fcWidth.value + ftWidth.value + ffWidth.value + 13;
+  // 13 for spaces and keywords "if", "then", "else" (10 chars) + 3 for spaces
+});
+
+const iteFitsHorizontal = computed(() => {
+  return iteTotalWidthIfHorizontal.value <= props.widthLimit;
+});
+
+const iteTotalWidthIfVertical = computed(() => {
+  if (fcWidth.value === null || ftWidth.value === null || ffWidth.value === null) {
+    return 0;
+  }
+  return Math.max(fcWidth.value, ftWidth.value, ffWidth.value) + 1; // 1 for space
+});
+
+// when fcWidth, ftWidth, and ffWidth are set, emit total width
+watch(iteTotalWidthIfHorizontal, w => {
+  // if-then-else formula, all children's widths are needed
+  if (props.form?.f.tag === 'FormIfThenElse') {
+    if (fcWidth.value !== null && ftWidth.value !== null && ffWidth.value !== null) {
+      if (iteFitsHorizontal.value) {
+        // enough horizontal space, using horizontal layout
+        emitWidth(iteTotalWidthIfHorizontal.value);
+      } else {
+        // not enough horizontal space, using vertical layout
+        emitWidth(iteTotalWidthIfVertical.value);
+      }
+    }
+  }
+});
 
 </script>
 
@@ -12,30 +218,54 @@ const props = defineProps<{
   <span v-if="!form" class="border">
     <em>???</em>
   </span>
-  <span v-if="form" class="border">
-    <span v-if="form.f.tag === 'FormTrue'">True</span>
-    <span v-else-if="form.f.tag === 'FormFalse'">False</span>
-    <span v-else-if="form.f.tag === 'FormComp'" class="d-flex align-items-center justify-content-center">
-      <FormattedExpr :expr="form.f.e1" />
-      {{ binaryCompSymbolMap[form.f.comp] }}
-      <FormattedExpr :expr="form.f.e2" />
+  <span v-else>
+    <!-- literal formulas True / False -->
+    <span v-if="form.f.tag === 'FormTrue'">{{ emitWidthFromString('True') }}</span>
+    <span v-else-if="form.f.tag === 'FormFalse'">{{ emitWidthFromString('False') }}</span>
+    <!-- comparisons -->
+    <span v-else-if="form.f.tag === 'FormComp'"
+      :class="{ 'd-flex': true, 'flex-column': !binaryCompFitsHorizontal, 'align-items-center': true }">
+      <span class="border px-1">
+        <FormattedExpr :expr="form.f.e1" :widthLimit="binaryCompChildWidthLimit" @width="setE1Width" />
+      </span>
+      {{ binaryCompSymbol }}
+      <span class="border px-1">
+        <FormattedExpr :expr="form.f.e2" :widthLimit="binaryCompChildWidthLimit" @width="setE2Width" />
+      </span>
     </span>
+    <!-- unary logical connectors -->
     <span v-else-if="form.f.tag === 'FormUnary'" class="d-flex align-items-center justify-content-center">
-      {{ unaryConnSymbolMap[form.f.uconn] }}
-      <FormattedForm :form="form.f.f1" />
+      {{ unaryConnSymbol }}
+      <span class="border px-1">
+        <FormattedForm :form="form.f.f1" :widthLimit="unaryChildWidthLimit" @width="setFWidth" />
+      </span>
     </span>
-    <span v-else-if="form.f.tag === 'FormBinary'" class="d-flex align-items-center justify-content-center">
-      <FormattedForm :form="form.f.f1" />
-      {{ binaryConnSymbolMap[form.f.bconn] }}
-      <FormattedForm :form="form.f.f2" />
+    <!-- binary logical connectors -->
+    <span v-else-if="form.f.tag === 'FormBinary'"
+      :class="{ 'd-flex': true, 'flex-column': !binaryConnFitsHorizontal, 'align-items-center': true }">
+      <span class="border px-1">
+        <FormattedForm :form="form.f.f1" :widthLimit="binaryChildWidthLimit" @width="setF1Width" />
+      </span>
+      {{ binaryConnSymbol }}
+      <span class="border px-1">
+        <FormattedForm :form="form.f.f2" :widthLimit="binaryChildWidthLimit" @width="setF2Width" />
+      </span>
     </span>
-    <span v-else-if="form.f.tag === 'FormIfThenElse'" class="d-flex align-items-center justify-content-center">
-      If
-      <FormattedForm :form="form.f.fc" />
+    <!-- if-then-else formulas -->
+    <span v-else-if="form.f.tag === 'FormIfThenElse'"
+      :class="{ 'd-flex': true, 'flex-column': !iteFitsHorizontal, 'align-items-center': true }">
+      <span>If</span>
+      <span class="border px-1">
+        <FormattedForm :form="form.f.fc" :widthLimit="iteChildWidthLimit" @width="setFcWidth" />
+      </span>
       then
-      <FormattedForm :form="form.f.ft" />
+      <span class="border px-1">
+        <FormattedForm :form="form.f.ft" :widthLimit="iteChildWidthLimit" @width="setFtWidth" />
+      </span>
       else
-      <FormattedForm :form="form.f.ff" />
+      <span class="border px-1">
+        <FormattedForm :form="form.f.ff" :widthLimit="iteChildWidthLimit" @width="setFfWidth" />
+      </span>
     </span>
   </span>
 </template>
