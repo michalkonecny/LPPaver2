@@ -5,7 +5,7 @@ module LPPaver2.RealConstraints.Eval
   ( CanGetVarDomain (..),
     CanEval,
     evalExpr,
-    HasKleenanComparison,
+    HasKleeneanComparison,
     simplifyEvalForm,
     SimplifyFormResult (..),
     EvaluatedForm (..),
@@ -104,7 +104,7 @@ evalBinop OpMinus v1 v2 = v1 - v2
 evalBinop OpTimes v1 v2 = v1 * v2
 evalBinop OpDivide v1 v2 = v1 / v2
 
-type HasKleenanComparison r =
+type HasKleeneanComparison r =
   ( HasOrder r r,
     OrderCompareType r r ~ Kleenean,
     HasEq r r,
@@ -151,7 +151,7 @@ resultWithForm result f =
   result {evaluatedForm = result.evaluatedForm {form = f}}
 
 simplifyEvalForm ::
-  (CanEval r, HasKleenanComparison r) =>
+  (CanEval r, HasKleeneanComparison r) =>
   r ->
   Box ->
   Form ->
@@ -262,8 +262,8 @@ simplifyEvalForm (sapleR :: r) box formInit =
                   (simplifiedF, exprValuesCTF, oldToNewCTF) = flattenResult resultF
                   buildR (f :: Form) = buildResult oldToNewCTF h (EvaluatedForm {form = f, exprValues = exprValuesCTF})
                   decisionC = getFormDecision simplifiedC
-                  decisionT = getFormDecision simplifiedC
-                  decisionF = getFormDecision simplifiedC
+                  decisionT = getFormDecision simplifiedT
+                  decisionF = getFormDecision simplifiedF
                in case (decisionC, decisionT, decisionF) of
                     (CertainTrue, _, _) -> buildR simplifiedT -- "then" branch
                     (CertainFalse, _, _) -> buildR simplifiedF -- "else" branch
