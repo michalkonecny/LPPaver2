@@ -4,6 +4,7 @@
 module LPPaver2.RealConstraints.Form
   ( Form (..),
     lookupFormNode,
+    formVariables,
     FormHash,
     FormNode,
     FormStore,
@@ -28,6 +29,7 @@ import LPPaver2.RealConstraints.Expr
 import MixedTypesNumPrelude
 import Text.Printf (printf)
 import Prelude qualified as P
+import qualified Data.Set as Set
 
 data FormF f
   = FormComp {comp :: BinaryComp, e1 :: ExprHash, e2 :: ExprHash}
@@ -109,6 +111,31 @@ showFormF showE showF formNode =
     FormIfThenElse c t f -> printf "if (%s) then (%s) else (%s)" (showF c) (showF t) (showF f)
     FormTrue -> "True"
     FormFalse -> "False"
+
+formVariables :: Form -> Set.Set Var
+formVariables form = hashVars form.root
+  where
+    hashVars :: FormHash -> Set.Set Var
+    hashVars h =
+      case lookupFormNode form h of
+        FormComp {e1, e2} -> Set.union (exprVariables e1) (exprVariables e2)
+        FormUnary {f1} -> hashVars f1
+        FormBinary {f1, f2} -> Set.union (hashVars f1) (hashVars f2)
+        FormIfThenElse {fc, ft, ff} ->
+          Set.unions [hashVars fc, hashVars ft, hashVars ff]
+        FormTrue -> Set.empty
+        FormFalse -> Set.empty
+
+    exprVariables :: ExprHash -> Set.Set Var
+    exprVariables eh =
+      case Map.lookup eh form.nodesE of
+        Nothing -> error "A hash is missing from form.nodesE"
+        Just exprNode ->
+          case exprNode of
+            ExprVar var -> Set.singleton var
+            ExprLit _ -> Set.empty
+            ExprUnary {e1} -> exprVariables e1
+            ExprBinary {e1, e2} -> Set.union (exprVariables e1) (exprVariables e2)
 
 form0 :: FormNode -> Form
 form0 f =
