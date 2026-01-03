@@ -104,7 +104,7 @@ lppBranchAndPrune ::
     MonadIO m,
     MonadUnliftIOWithState m,
     CanEval r,
-    HasKleenanComparison r,
+    HasKleeneanComparison r,
     BP.CanControlSteps m LPPStep
   ) =>
   r ->
@@ -128,7 +128,7 @@ lppBranchAndPrune sampleR (LPPBPParams {..}) = do
     dummyPriorityQueue = BoxStack [problem]
 
 instance
-  (CanEval r, HasKleenanComparison r, Applicative m) =>
+  (CanEval r, HasKleeneanComparison r, Applicative m) =>
   BP.CanPrune m r Form Box Boxes
   where
   pruneProblemM sampleR (BP.Problem {scope, constraint}) = pure pavingP
