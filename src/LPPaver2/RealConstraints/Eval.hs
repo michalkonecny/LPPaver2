@@ -262,8 +262,8 @@ simplifyEvalForm (sapleR :: r) box formInit =
                   (simplifiedF, exprValuesCTF, oldToNewCTF) = flattenResult resultF
                   buildR (f :: Form) = buildResult oldToNewCTF h (EvaluatedForm {form = f, exprValues = exprValuesCTF})
                   decisionC = getFormDecision simplifiedC
-                  decisionT = getFormDecision simplifiedC
-                  decisionF = getFormDecision simplifiedC
+                  decisionT = getFormDecision simplifiedT
+                  decisionF = getFormDecision simplifiedF
                in case (decisionC, decisionT, decisionF) of
                     (CertainTrue, _, _) -> buildR simplifiedT -- "then" branch
                     (CertainFalse, _, _) -> buildR simplifiedF -- "else" branch
