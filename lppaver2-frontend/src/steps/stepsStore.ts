@@ -103,7 +103,8 @@ export const useStepsStore = defineStore('steps', {
     },
     getStepColour(step: Step) {
       if (step.tag === "GiveUpOnProblemStep") {
-        return "#f0b0f0";
+        return "#ffffff";
+        // return "#f0b0f0";
       }
 
       const truthResult = this.getStepTruthResult(step);

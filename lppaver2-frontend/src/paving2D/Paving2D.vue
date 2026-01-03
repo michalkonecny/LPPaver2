@@ -68,7 +68,7 @@ function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
     showlegend: false,
     customdata: [problem.scope, problem.constraint],
     text: boxDescr,
-    hoverinfo: "text",
+    hoverinfo: "none",
   }
 
   return [problemLineTrace, ...subProblemTraces];
@@ -111,7 +111,8 @@ const layout = computed<Partial<Plotly.Layout>>(() => ({
   yaxis: getAxisLayout(yVar.value),
   margin: { t: 20, b: 40, l: 40, r: 20 },
   shapes: [...getFocusedProblemOutline()],
-  dragmode: "pan",
+  // dragmode: "pan",
+  dragmode: "zoom",
 }));
 
 let handlerAttached = false;
