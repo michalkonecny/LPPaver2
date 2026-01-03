@@ -92,8 +92,14 @@ data LPPBPParams = LPPBPParams
 
 shouldGiveUpOnBPLPPProblem :: Rational -> LPPProblem -> Bool
 shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
-  all smallerThanPrec (Map.elems scope.box_.varDomains)
+  all smallerThanPrec domainsOfSplitVars
   where
+    domainsOfSplitVars =
+      [ ball
+        | var <- scope.box_.splitOrder,
+          Just ball <- [Map.lookup var scope.box_.varDomains]
+      ]
+
     smallerThanPrec :: MPBall -> Bool
     smallerThanPrec ball = diameter <= giveUpAccuracy
       where
@@ -134,13 +140,14 @@ instance
   pruneProblemM sampleR (BP.Problem {scope, constraint}) = pure pavingP
     where
       result = simplifyEvalForm sampleR scope constraint
-      simplifiedConstraint = result.evaluatedForm.form
+      simplifiedForm = result.evaluatedForm.form
+      simplifiedScope = boxRestrictSplitOrder (formVariables simplifiedForm) scope
       mkBoxes box = Boxes {store = Map.fromList [(box.boxHash, box)]}
       pavingP :: BP.Paving Form Box Boxes
-      pavingP = case getFormDecision simplifiedConstraint of
+      pavingP = case getFormDecision simplifiedForm of
         CertainTrue -> BP.pavingInner scope (mkBoxes scope)
         CertainFalse -> BP.pavingOuter scope (mkBoxes scope)
-        _ -> BP.pavingUndecided scope [BP.Problem {scope, constraint = simplifiedConstraint}]
+        _ -> BP.pavingUndecided scope [BP.Problem {scope = simplifiedScope, constraint = simplifiedForm}]
 
 newtype BoxStack = BoxStack [LPPProblem]
 
@@ -175,6 +182,7 @@ instance BP.BasicSetsToSet Box Boxes where
     where
       store = Map.fromList [(box.boxHash, box) | box <- list]
 
-instance BP.CanSplitProblem constraint Box where
+instance BP.CanSplitProblem Form Box where
+  splitProblem :: BP.Problem Form Box -> [BP.Problem Form Box]
   splitProblem (BP.Problem {scope, constraint}) =
     map (\box -> BP.Problem {scope = box, constraint}) $ splitBox scope

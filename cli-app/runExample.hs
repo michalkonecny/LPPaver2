@@ -44,8 +44,8 @@ problems eps =
       ),
       ( "simpleAnd",
         Problem
-          { scope = mkBox [("x", (0.0, 1.0)), ("y", (0.0, 2.0))],
-            constraint = (y <= 1 + eps) && (1 - eps <= y)
+          { scope = mkBox [("x", (0.0, 2.0)), ("y", (0.0, 2.0))],
+            constraint = (y <= exprLit 1.0) && (exprLit 1.0 <= x)
           }
       ),
       ( "circleEps",

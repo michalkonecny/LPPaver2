@@ -13,6 +13,7 @@ module LPPaver2.RealConstraints.Boxes
     Boxes (..),
     boxesCount,
     boxesAreaD,
+    boxRestrictSplitOrder,
   )
 where
 
@@ -28,6 +29,7 @@ import Data.Hashable (Hashable (hash))
 import Data.List (sortOn)
 import Data.List qualified as List
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 import GHC.Generics (Generic)
 import GHC.Records
 import LPPaver2.RealConstraints.Expr (Var)
@@ -95,6 +97,7 @@ boxAreaD box =
 type BoxHash = Int
 
 type BoxStore = Map.Map BoxHash Box
+
 newtype Boxes = Boxes {store :: BoxStore}
   deriving (Generic)
 
@@ -111,7 +114,17 @@ boxesCount (Boxes {store}) = integer $ Map.size store
 boxesAreaD :: Boxes -> Double
 boxesAreaD (Boxes {store}) = sum (map boxAreaD (Map.elems store))
 
-{-- Splitting boxes --}
+{-- Changing the splitting order --}
+
+-- |
+-- Restrict the splitting order of a box to only the given variables.
+--
+-- Useful when some variables do not appear in the constraints anymore.
+boxRestrictSplitOrder :: Set.Set Var -> Box -> Box
+boxRestrictSplitOrder vars box =
+  boxWithHash $ box.box_ {splitOrder = filter (`Set.member` vars) box.box_.splitOrder}
+
+{-- Splitting a box --}
 
 splitBox :: Box -> [Box]
 splitBox box = case box.box_.splitOrder of
