@@ -48,7 +48,7 @@ instance A.ToJSON BinaryComp where
   toEncoding = A.genericToEncoding A.defaultOptions
 
 instance A.ToJSON UnaryConn where
-  toEncoding = A.genericToEncoding A.defaultOptions
+  toEncoding = A.genericToEncoding (A.defaultOptions {  A.tagSingleConstructors = True })
 
 instance A.ToJSON BinaryConn where
   toEncoding = A.genericToEncoding A.defaultOptions
