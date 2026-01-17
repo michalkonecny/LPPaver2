@@ -39,15 +39,15 @@ packages:
     subdir: aern2-affarith
     url: https://github.com/michalkonecny/aern2/archive/b9ec190cf9e2e165672b56e11690ae172fee3cde.tar.gz
 - completed:
-    commit: 0975c67cdf7f7fb6883707ebaeb9ddc93d455a54
+    commit: c990ce058ef99517c33aac5d72214ecfa7849624
     git: git@github.com:michalkonecny/branch-and-prune.git
     name: branch-and-prune
     pantry-tree:
-      sha256: 59a6e4988ec1482555cf7f4a19b19ba3c9da1274a0069ffeb5951b438a9cbaf6
+      sha256: 520734f05245ea4def59ece9c6fe1e1770b6dc4645af8a611cd3125ebe892620
       size: 1819
     version: 0.1.0.0
   original:
-    commit: 0975c67cdf7f7fb6883707ebaeb9ddc93d455a54
+    commit: c990ce058ef99517c33aac5d72214ecfa7849624
     git: git@github.com:michalkonecny/branch-and-prune.git
 snapshots:
 - completed:
