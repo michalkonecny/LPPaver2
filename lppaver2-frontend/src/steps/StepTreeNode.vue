@@ -16,16 +16,15 @@ const step = stepsStore.stepFromProblem(props.problem);
 
 const stepTruth = stepsStore.getStepTruthResult(step);
 
-const stepTruthNote = computed(() => {
-  switch (stepTruth) {
-    case "true":
-      return "(True)";
-    case "false":
-      return "(False)";
-    default:
-      return "";
-  }
-});
+const stepTruthNote =
+  stepTruth === "true" ? " (True)" :
+    stepTruth === "false" ? " (False)" :
+      "";
+
+const stepCategory = step.tag === "ProgressStep" ? 
+  (step.progressPaving.undecided.length > 1 ? "Split" : "Prune") : step.tag;
+
+const stepLabel = `${stepCategory}${stepTruthNote}`;
 
 const subProblems = getSubProblems(step);
 
@@ -73,7 +72,7 @@ watch(focusedProblem, (newVal) => {
     <tbody>
       <tr>
         <td colspan="2" class="text-left fw-bold">
-          {{ step.tag }} {{ stepTruthNote }}
+          {{ stepLabel }}
         </td>
       </tr>
       <tr v-for="subProblem in subProblems">
