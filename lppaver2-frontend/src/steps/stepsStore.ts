@@ -86,15 +86,14 @@ export const useStepsStore = defineStore('steps', {
     },
     getStepTruthResult(step: Step): "true" | "false" | "unknown" {
       switch (step.tag) {
-        case "PruneStep":
+        case "ProgressStep":
           const stepScope = step.problem.scope;
-          const inner = step.prunePaving.inner;
-          const outer = step.prunePaving.outer;
+          const inner = step.progressPaving.inner;
+          const outer = step.progressPaving.outer;
 
           // check if the pruned paving's inner or outer cover the whole step scope
           if (inner && inner.boxes[0] == stepScope) return "true";
           if (outer && outer.boxes[0] == stepScope) return "false";
-          console.log("step", step);
 
           return "unknown";
         default:
