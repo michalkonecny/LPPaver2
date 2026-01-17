@@ -34,6 +34,7 @@ resolver: lts-22.44
 #   - wai
 packages:
 - .
+# - ../branch-and-prune
 # Dependency packages to be pulled from upstream that are not in the resolver.
 # These entries can reference officially published versions as well as
 # forks / in-progress versions pinned to a git hash. For example:
@@ -53,7 +54,7 @@ extra-deps:
   subdirs:
   - aern2-affarith
 - git: git@github.com:michalkonecny/branch-and-prune.git
-  commit: 'b543da1f772f3774a782a5cc068ac590cd38bdfa'
+  commit: '0975c67cdf7f7fb6883707ebaeb9ddc93d455a54'
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

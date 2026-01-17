@@ -51,8 +51,7 @@ export type Paving = {
 
 export type Step =
   | InitStep
-  | PruneStep
-  | SplitStep
+  | ProgressStep
   | GiveUpOnProblemStep
   | AbortStep
   | DoneStep
@@ -62,16 +61,18 @@ export type InitStep = {
   problem: Problem
 }
 
-export type PruneStep = {
-  tag: 'PruneStep',
+export type ProgressStep = {
+  tag: 'ProgressStep',
   problem: Problem,
-  prunePaving: Paving
+  progressPaving: Paving
 }
 
-export type SplitStep = {
-  tag: 'SplitStep',
-  problem: Problem,
-  pieces: Problem[]
+export function isSplitStep(step: ProgressStep): boolean {
+  return step.progressPaving.undecided.length > 1;
+}
+
+export function isPruneStep(step: ProgressStep): boolean {
+  return step.progressPaving.inner.boxes.length > 0 || step.progressPaving.outer.boxes.length > 0;
 }
 
 export type GiveUpOnProblemStep = {
@@ -94,10 +95,8 @@ export function getStepProblem(step: Step): Problem | null {
 
 export function getSubProblems(step: Step): Problem[] {
   switch (step.tag) {
-    case "PruneStep":
-      return [...step.prunePaving.undecided];
-    case "SplitStep":
-      return [...step.pieces];
+    case "ProgressStep":      
+      return [...step.progressPaving.undecided];
     default:
       return [];
   }
