@@ -184,7 +184,7 @@ simplifyEvalForm (sapleR :: r) box formInit =
     simplify result0 =
       simplifyNodeReusingPrev form0.root
       where
-        (form0, exprValues0, _formValues0, oldToNew0) = flattenResult result0
+        (form0, exprValues0, formValues0, oldToNew0) = flattenResult result0
 
         simplifyNodeReusingPrev h =
           case getFormDecision form0 of
@@ -213,7 +213,7 @@ simplifyEvalForm (sapleR :: r) box formInit =
                     CompLeq -> e1Value <= e2Value
                     CompEq -> e1Value == e2Value
                     CompNeq -> e1Value /= e2Value
-                  formValues = Map.singleton h comparison
+                  formValues = Map.insert h comparison formValues0
                   buildR (f :: Form) =
                     buildResult oldToNew0 h (EvaluatedForm {form = f, exprValues = exprValues12, formValues})
                in case comparison of

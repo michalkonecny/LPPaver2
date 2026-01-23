@@ -13,6 +13,7 @@ import GHC.Records (getField)
 import LPPaver2.BranchAndPrune (LPPPaving, LPPProblem)
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
+import AERN2.Kleenean (Kleenean)
 
 instance A.ToJSON MP.MPBall where
   toJSON b = A.object ["l" .= lD, "u" .= uD]
@@ -60,7 +61,15 @@ instance A.ToJSON Form where
   toJSON (Form {..}) =
     A.object ["formH" .= root]
 
-instance (A.ToJSON problem, A.ToJSON paving) => A.ToJSON (BP.Step problem paving) where
+instance A.ToJSON (EvaluatedForm r) where
+  toJSON (EvaluatedForm {formValues}) =
+    A.object
+      [ "formValues" .= formValues ]
+
+instance A.ToJSON Kleenean where
+  toEncoding = A.genericToEncoding A.defaultOptions
+
+instance (A.ToJSON problem, A.ToJSON paving, A.ToJSON evalInfo) => A.ToJSON (BP.Step problem paving evalInfo) where
   toEncoding = A.genericToEncoding A.defaultOptions
 
 instance A.ToJSON LPPProblem where

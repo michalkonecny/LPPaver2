@@ -215,7 +215,7 @@ initControl = liftIO $ do
 stringToBSS :: String -> BSS.ByteString
 stringToBSS = TE.encodeUtf8 . T.pack
 
-instance (MonadIO m, MonadState LPPControlState m) => BP.CanControlSteps m LPPStep where
+instance (MonadIO m, MonadState LPPControlState m) => BP.CanControlSteps m (LPPStep r) where
   reportStep step = do
     let boxes = getStepBoxes step
     let exprs = getStepExprs step
