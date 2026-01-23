@@ -225,13 +225,13 @@ instance (MonadIO m, MonadState LPPControlState m) => BP.CanControlSteps m (LPPS
     -- update Redis with new boxes, formulas, expressions and the step itself
     liftIO $ Redis.runRedis ctrlState.redisDest.connection $ do
       let newBoxes = Map.difference boxes ctrlState.boxesStore
-      updateRedisHashStore (boxesListKey ctrlState.redisDest) newBoxes
+      updateRedisHashStore (boxesListKey ctrlState.redisDest) (Map.mapKeys unBoxHash newBoxes)
 
       let newExprs = Map.difference exprs ctrlState.exprsStore
-      updateRedisHashStore (exprsListKey ctrlState.redisDest) newExprs
+      updateRedisHashStore (exprsListKey ctrlState.redisDest) (Map.mapKeys unExprHash newExprs)
 
       let newForms = Map.difference forms ctrlState.formsStore
-      updateRedisHashStore (formsListKey ctrlState.redisDest) newForms
+      updateRedisHashStore (formsListKey ctrlState.redisDest) (Map.mapKeys unFormHash newForms)
 
       -- Push the step JSON to the Redis list of steps
       let stepJSONBSS = BSL.toStrict $ A.encode step

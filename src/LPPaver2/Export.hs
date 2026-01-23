@@ -2,6 +2,7 @@
 
 module LPPaver2.Export (lppProblemToJSON) where
 
+import AERN2.Kleenean (Kleenean)
 import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
 import Data.Aeson (ToJSON (toJSON), (.=))
@@ -9,11 +10,14 @@ import Data.Aeson qualified as A
 import Data.Aeson.Key (fromString)
 import Data.Aeson.Types qualified as A
 import Data.Map qualified as Map
+import Data.Text qualified as T
+import Data.Text.Lazy qualified as TL
+import Data.Text.Lazy.Builder qualified as B
+import Data.Text.Lazy.Builder.Int qualified as B
 import GHC.Records (getField)
 import LPPaver2.BranchAndPrune (LPPPaving, LPPProblem)
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
-import AERN2.Kleenean (Kleenean)
 
 instance A.ToJSON MP.MPBall where
   toJSON b = A.object ["l" .= lD, "u" .= uD]
@@ -24,6 +28,12 @@ instance A.ToJSON MP.MPBall where
 
 instance A.ToJSON Box_ where
   toEncoding = A.genericToEncoding A.defaultOptions
+
+instance A.ToJSON BoxHash where
+  toJSON (BoxHash h) = A.String (intToText h)
+
+intToText :: Int -> T.Text
+intToText = TL.toStrict . B.toLazyText . B.decimal
 
 instance A.ToJSON Box where
   toEncoding = A.genericToEncoding A.defaultOptions
@@ -41,6 +51,9 @@ instance A.ToJSON BinaryOp where
 instance (A.ToJSON expr) => A.ToJSON (ExprF expr) where
   toEncoding = A.genericToEncoding A.defaultOptions
 
+instance A.ToJSON ExprHash where
+  toJSON (ExprHash h) = A.String (intToText h)
+
 instance A.ToJSON Expr where
   toJSON (Expr {..}) =
     A.object ["exprH" .= root]
@@ -49,13 +62,19 @@ instance A.ToJSON BinaryComp where
   toEncoding = A.genericToEncoding A.defaultOptions
 
 instance A.ToJSON UnaryConn where
-  toEncoding = A.genericToEncoding (A.defaultOptions {  A.tagSingleConstructors = True })
+  toEncoding = A.genericToEncoding (A.defaultOptions {A.tagSingleConstructors = True})
 
 instance A.ToJSON BinaryConn where
   toEncoding = A.genericToEncoding A.defaultOptions
 
 instance (A.ToJSON form) => A.ToJSON (FormF form) where
   toEncoding = A.genericToEncoding A.defaultOptions
+
+instance A.ToJSON FormHash where
+  toJSON (FormHash h) = A.String (intToText h)
+
+instance A.ToJSONKey FormHash where
+  toJSONKey = A.toJSONKeyText (intToText . \(FormHash h) -> h)
 
 instance A.ToJSON Form where
   toJSON (Form {..}) =
@@ -64,7 +83,7 @@ instance A.ToJSON Form where
 instance A.ToJSON (EvaluatedForm r) where
   toJSON (EvaluatedForm {formValues}) =
     A.object
-      [ "formValues" .= formValues ]
+      ["formValues" .= formValues]
 
 instance A.ToJSON Kleenean where
   toEncoding = A.genericToEncoding A.defaultOptions

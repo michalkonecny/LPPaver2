@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
-import { getStepProblem, problemToProblemHash, type Box, type BoxHash, type Problem, type ProblemHash, type Step } from './steps'
+import {
+  getStepProblem, problemToProblemHash, type Box, type BoxHash,
+  type Problem, type ProblemHash, type Step, type Kleenean
+} from './steps'
 import { type ExprHash, type Expr, type ExprF, exprHashToExpr } from '../formulas/exprs'
 import { formHashToForm, type Form, type FormF, type FormHash } from '../formulas/forms'
 
@@ -36,10 +39,10 @@ export const useStepsStore = defineStore('steps', {
       // get formTrueHash and formFalseHash from forms
       Object.entries(forms).forEach(([formHash, form]) => {
         if (form.tag === "FormTrue") {
-          this.formTrueHash = Number(formHash)
+          this.formTrueHash = formHash
         }
         if (form.tag === "FormFalse") {
-          this.formFalseHash = Number(formHash)
+          this.formFalseHash = formHash
         }
       });
 
@@ -84,7 +87,7 @@ export const useStepsStore = defineStore('steps', {
       }
       return step;
     },
-    getStepTruthResult(step: Step): "true" | "false" | "unknown" {
+    getStepTruthResult(step: Step): Kleenean {
       switch (step.tag) {
         case "ProgressStep":
           const stepScope = step.problem.scope;
@@ -92,12 +95,12 @@ export const useStepsStore = defineStore('steps', {
           const outer = step.progressPaving.outer;
 
           // check if the pruned paving's inner or outer cover the whole step scope
-          if (inner && inner.boxes[0] == stepScope) return "true";
-          if (outer && outer.boxes[0] == stepScope) return "false";
+          if (inner && inner.boxes[0] == stepScope) return "CertainTrue";
+          if (outer && outer.boxes[0] == stepScope) return "CertainFalse";
 
-          return "unknown";
+          return "TrueOrFalse";
         default:
-          return "unknown";
+          return "TrueOrFalse";
       }
     },
     getStepColour(step: Step) {
@@ -107,20 +110,23 @@ export const useStepsStore = defineStore('steps', {
       }
 
       const truthResult = this.getStepTruthResult(step);
-
-      switch (truthResult) {
-        case "true":
-          return "#e0ffe0";
-        case "false":
-          return "#ffd0e0";
-        default:
-          return "#e0e0ff";
-      }
+      return getTruthColour(truthResult);
     }
   },
   getters: {
   },
 })
+
+export function getTruthColour(kleenean: Kleenean): string {
+  switch (kleenean) {
+    case "CertainTrue":
+      return "#e0ffe0";
+    case "CertainFalse":
+      return "#ffd0e0";
+    case "TrueOrFalse":
+      return "#e0e0ff";
+  }
+}
 
 const keyPrefix = 'lppaver2'
 const wedisURLbase = 'http://127.0.0.1:7379'
@@ -145,11 +151,11 @@ async function fetchWholeHash<ValueType>(sessionRef: string, hashKey: string) {
   const hgetallResult = data.HGETALL as Record<string, string>
   const values = Object.fromEntries(
     Object.entries(hgetallResult).map(([valueHash, value]: [string, string]) => [
-      Number(valueHash),
+      valueHash,
       JSON.parse(value) as ValueType,
     ])
   )
-  return values as Record<number, ValueType>
+  return values as Record<string, ValueType>
 }
 
 async function fetchWholeList<ValueType>(sessionRef: string, listKey: string) {

@@ -1,10 +1,13 @@
 <script lang="ts" setup>
 import { binaryCompSymbolMap, binaryConnSymbolMap, unaryConnSymbolMap, type Form } from './forms';
+import { computed, ref, watch, type StyleValue } from 'vue';
+import type { FormValues } from '@/steps/steps';
 import FormattedExpr from './FormattedExpr.vue';
-import { computed, ref, watch } from 'vue';
+import { getTruthColour } from '@/steps/stepsStore';
 
 const props = defineProps<{
   form?: Form;
+  formValues?: FormValues;
   widthLimit: number;
 }>();
 
@@ -20,6 +23,15 @@ function emitWidthFromString(result: string) {
   emitWidth(result.length);
   return result;
 }
+
+const truthValue = computed(() => {
+  if (!props.form || !props.formValues) {
+    return null;
+  }
+  return props.formValues[props.form.hash];
+})
+
+const colour = computed(() => getTruthColour(truthValue.value ?? 'TrueOrFalse'));
 
 ////////////////////////////
 // for binary comparisons
@@ -212,6 +224,13 @@ watch(iteTotalWidthIfHorizontal, w => {
   }
 });
 
+const style = computed<StyleValue>(() => {
+  return {
+    'backgroundColor': colour.value,
+    'border': '0.5px solid grey',
+  };
+});
+
 </script>
 
 <template>
@@ -220,51 +239,51 @@ watch(iteTotalWidthIfHorizontal, w => {
   </span>
   <span v-else>
     <!-- literal formulas True / False -->
-    <span v-if="form.f.tag === 'FormTrue'">{{ emitWidthFromString('True') }}</span>
-    <span v-else-if="form.f.tag === 'FormFalse'">{{ emitWidthFromString('False') }}</span>
+    <span v-if="form.f.tag === 'FormTrue'" :style="style">{{ emitWidthFromString('True') }}</span>
+    <span v-else-if="form.f.tag === 'FormFalse'" :style="style">{{ emitWidthFromString('False') }}</span>
     <!-- comparisons -->
-    <span v-else-if="form.f.tag === 'FormComp'"
+    <span v-else-if="form.f.tag === 'FormComp'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !binaryCompFitsHorizontal, 'align-items-center': true }">
-      <span class="border px-1">
+      <span class="px-1">
         <FormattedExpr :expr="form.f.e1" :widthLimit="binaryCompChildWidthLimit" @width="setE1Width" />
       </span>
       {{ binaryCompSymbol }}
-      <span class="border px-1">
+      <span class="px-1">
         <FormattedExpr :expr="form.f.e2" :widthLimit="binaryCompChildWidthLimit" @width="setE2Width" />
       </span>
     </span>
     <!-- unary logical connectors -->
-    <span v-else-if="form.f.tag === 'FormUnary'" class="d-flex align-items-center justify-content-center">
+    <span v-else-if="form.f.tag === 'FormUnary'" :style="style" class="d-flex align-items-center justify-content-center">
       {{ unaryConnSymbol }}
-      <span class="border px-1">
-        <FormattedForm :form="form.f.f1" :widthLimit="unaryChildWidthLimit" @width="setFWidth" />
+      <span class="px-1">
+        <FormattedForm :form="form.f.f1" :formValues="formValues" :widthLimit="unaryChildWidthLimit" @width="setFWidth" />
       </span>
     </span>
     <!-- binary logical connectors -->
-    <span v-else-if="form.f.tag === 'FormBinary'"
+    <span v-else-if="form.f.tag === 'FormBinary'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !binaryConnFitsHorizontal, 'align-items-center': true }">
-      <span class="border px-1">
-        <FormattedForm :form="form.f.f1" :widthLimit="binaryChildWidthLimit" @width="setF1Width" />
+      <span class="px-1">
+        <FormattedForm :form="form.f.f1" :formValues="formValues" :widthLimit="binaryChildWidthLimit" @width="setF1Width" />
       </span>
       {{ binaryConnSymbol }}
-      <span class="border px-1">
-        <FormattedForm :form="form.f.f2" :widthLimit="binaryChildWidthLimit" @width="setF2Width" />
+      <span class="px-1">
+        <FormattedForm :form="form.f.f2" :formValues="formValues" :widthLimit="binaryChildWidthLimit" @width="setF2Width" />
       </span>
     </span>
     <!-- if-then-else formulas -->
-    <span v-else-if="form.f.tag === 'FormIfThenElse'"
+    <span v-else-if="form.f.tag === 'FormIfThenElse'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !iteFitsHorizontal, 'align-items-center': true }">
       <span>If</span>
-      <span class="border px-1">
-        <FormattedForm :form="form.f.fc" :widthLimit="iteChildWidthLimit" @width="setFcWidth" />
+      <span class="px-1">
+        <FormattedForm :form="form.f.fc" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFcWidth" />
       </span>
       then
-      <span class="border px-1">
-        <FormattedForm :form="form.f.ft" :widthLimit="iteChildWidthLimit" @width="setFtWidth" />
+      <span class="px-1">
+        <FormattedForm :form="form.f.ft" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFtWidth" />
       </span>
       else
-      <span class="border px-1">
-        <FormattedForm :form="form.f.ff" :widthLimit="iteChildWidthLimit" @width="setFfWidth" />
+      <span class="px-1">
+        <FormattedForm :form="form.f.ff" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFfWidth" />
       </span>
     </span>
   </span>

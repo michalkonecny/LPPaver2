@@ -77,8 +77,8 @@ getStepForms step =
 basicFormStore :: FormStore
 basicFormStore =
   Map.fromList
-    [ (hash (FormTrue :: FormF FormHash), FormTrue),
-      (hash (FormFalse :: FormF FormHash), FormFalse)
+    [ (FormHash (hash (FormTrue :: FormF FormHash)), FormTrue),
+      (FormHash (hash (FormFalse :: FormF FormHash)), FormFalse)
     ]
 
 type LPPBPResult = BP.Result Form Box Boxes

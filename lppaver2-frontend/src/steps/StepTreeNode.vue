@@ -17,8 +17,8 @@ const step = stepsStore.stepFromProblem(props.problem);
 const stepTruth = stepsStore.getStepTruthResult(step);
 
 const stepTruthNote =
-  stepTruth === "true" ? " (True)" :
-    stepTruth === "false" ? " (False)" :
+  stepTruth === "CertainTrue" ? " (True)" :
+    stepTruth === "CertainFalse" ? " (False)" :
       "";
 
 const stepCategory = step.tag === "ProgressStep" ? 

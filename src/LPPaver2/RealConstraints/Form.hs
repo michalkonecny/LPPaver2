@@ -5,7 +5,7 @@ module LPPaver2.RealConstraints.Form
   ( Form (..),
     lookupFormNode,
     formVariables,
-    FormHash,
+    FormHash (..),
     FormNode,
     FormStore,
     FormF (..),
@@ -23,13 +23,13 @@ where
 import AERN2.Kleenean (Kleenean (CertainFalse, CertainTrue, TrueOrFalse))
 import Data.Hashable (Hashable (hash))
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 import GHC.Generics (Generic)
 import GHC.Records (HasField (getField))
 import LPPaver2.RealConstraints.Expr
 import MixedTypesNumPrelude
 import Text.Printf (printf)
 import Prelude qualified as P
-import qualified Data.Set as Set
 
 data FormF f
   = FormComp {comp :: BinaryComp, e1 :: ExprHash, e2 :: ExprHash}
@@ -63,7 +63,11 @@ instance Show BinaryConn where
   show ConnOr = "∨"
   show ConnImpl = "⇒"
 
-type FormHash = Int
+newtype FormHash = FormHash {unFormHash :: Int}
+  deriving (P.Eq, P.Ord, Generic)
+
+instance Hashable FormHash where
+  hash (FormHash h) = hash h
 
 type FormNode = FormF FormHash
 
@@ -85,12 +89,12 @@ lookupFormNode form h =
   case Map.lookup h form.nodesF of
     Just node -> node
     Nothing
-      | h == formTrue.root -> FormTrue
-      | h == formFalse.root -> FormFalse
+      | h P.== formTrue.root -> FormTrue
+      | h P.== formFalse.root -> FormFalse
       | otherwise -> error "Missing node in formula"
 
 instance P.Eq Form where
-  f1 == f2 = f1.root == f2.root
+  f1 == f2 = f1.root P.== f2.root
 
 instance Show Form where
   show form = showFormHash form.root
@@ -141,7 +145,7 @@ form0 :: FormNode -> Form
 form0 f =
   Form {nodesE = Map.empty, nodesF = Map.singleton root f, root}
   where
-    root = hash f
+    root = FormHash (hash f)
 
 -- | apply a unary connector to a form
 form1 :: UnaryConn -> Form -> Form
@@ -149,7 +153,7 @@ form1 uconn f1 =
   Form {nodesE = f1.nodesE, nodesF = Map.insert h e f1.nodesF, root = h}
   where
     e = FormUnary {uconn, f1 = f1.root}
-    h = hash e
+    h = FormHash (hash e)
 
 -- | apply a binary connector to a pair of forms
 form2 :: BinaryConn -> Form -> Form -> Form
@@ -161,7 +165,7 @@ form2 bconn f1 f2 =
     }
   where
     e = FormBinary {bconn, f1 = f1.root, f2 = f2.root}
-    h = hash e
+    h = FormHash (hash e)
 
 formIfThenElse :: Form -> Form -> Form -> Form
 formIfThenElse fc ft ff =
@@ -172,7 +176,7 @@ formIfThenElse fc ft ff =
     }
   where
     e = FormIfThenElse {fc = fc.root, ft = ft.root, ff = ff.root}
-    h = hash e
+    h = FormHash (hash e)
 
 formComp :: BinaryComp -> Expr -> Expr -> Form
 formComp comp e1 e2 =
@@ -183,7 +187,7 @@ formComp comp e1 e2 =
     }
   where
     e = FormComp {comp, e1 = e1.root, e2 = e2.root}
-    h = hash e
+    h = FormHash (hash e)
 
 formTrue :: Form
 formTrue = form0 FormTrue
@@ -193,8 +197,8 @@ formFalse = form0 FormFalse
 
 getFormDecision :: Form -> Kleenean
 getFormDecision form
-  | form.root == formTrue.root = CertainTrue
-  | form.root == formFalse.root = CertainFalse
+  | form.root P.== formTrue.root = CertainTrue
+  | form.root P.== formFalse.root = CertainFalse
   | otherwise = TrueOrFalse
 
 formLe :: Expr -> Expr -> Form
