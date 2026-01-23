@@ -247,23 +247,23 @@ simplifyEvalForm (sapleR :: r) box formInit =
                     ConnAnd ->
                       case (decision1, decision2) of
                         (CertainFalse, _) -> buildR CertainFalse formFalse
-                        (_, CertainFalse) -> buildR  CertainFalse formFalse
-                        (CertainTrue, _) -> buildR CertainTrue simplifiedF2
-                        (_, CertainTrue) -> buildR CertainTrue simplifiedF1
+                        (_, CertainFalse) -> buildR CertainFalse formFalse
+                        (CertainTrue, _) -> buildR decision2 simplifiedF2
+                        (_, CertainTrue) -> buildR decision1 simplifiedF1
                         _ -> buildR (decision1 && decision2) $ simplifiedF1 && simplifiedF2
                     ConnOr ->
                       case (decision1, decision2) of
                         (CertainTrue, _) -> buildR CertainTrue formTrue
                         (_, CertainTrue) -> buildR CertainTrue formTrue
-                        (CertainFalse, _) -> buildR CertainFalse simplifiedF2
-                        (_, CertainFalse) -> buildR CertainFalse simplifiedF1
+                        (CertainFalse, _) -> buildR decision2 simplifiedF2
+                        (_, CertainFalse) -> buildR decision1 simplifiedF1
                         _ -> buildR (decision1 || decision2) $ simplifiedF1 || simplifiedF2
                     ConnImpl ->
                       case (decision1, decision2) of
                         (CertainFalse, _) -> buildR CertainTrue formTrue
                         (_, CertainTrue) -> buildR CertainTrue formTrue
-                        (CertainTrue, _) -> buildR CertainTrue simplifiedF2
-                        (_, CertainFalse) -> buildR CertainFalse $ negate simplifiedF1
+                        (CertainTrue, _) -> buildR decision2 simplifiedF2
+                        (_, CertainFalse) -> buildR (not decision1) $ not simplifiedF1
                         _ -> buildR (not decision1 || decision2) $ formImpl simplifiedF1 simplifiedF2
             FormIfThenElse fcH ftH ffH ->
               let resultC = simplifyH result0 fcH
