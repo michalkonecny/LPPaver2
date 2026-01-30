@@ -8,7 +8,7 @@ module LPPaver2.RealConstraints.Boxes
     mkBox,
     boxAreaD,
     splitBox,
-    BoxHash,
+    BoxHash (..),
     BoxStore,
     Boxes (..),
     boxesCount,
@@ -56,7 +56,7 @@ data Box = Box {boxHash :: BoxHash, box_ :: Box_}
   deriving (Generic)
 
 boxWithHash :: Box_ -> Box
-boxWithHash box_ = Box {boxHash = hash box_, box_}
+boxWithHash box_ = Box {boxHash = BoxHash (hash box_), box_}
 
 instance Show Box where
   show (Box {box_ = Box_ {varDomains}}) =
@@ -72,7 +72,7 @@ instance MP.HasPrecision Box where
 
 mkBox :: [(Var, (Rational, Rational))] -> Box
 mkBox varDomainsRational =
-  Box {boxHash = hash box_, box_}
+  Box {boxHash = BoxHash (hash box_), box_}
   where
     box_ =
       Box_
@@ -94,7 +94,11 @@ boxAreaD box =
 
 {- Collections of boxes. -}
 
-type BoxHash = Int
+newtype BoxHash = BoxHash { unBoxHash :: Int }
+  deriving (P.Eq, P.Ord, Generic)
+
+instance Hashable BoxHash where
+  hash (BoxHash h) = hash h
 
 type BoxStore = Map.Map BoxHash Box
 

@@ -11,10 +11,35 @@ const { focusedProblem } = storeToRefs(stepStore)
 
 stepStore.initSession('default')
 
-const topForm = computed(() => {
+const focusedForm = computed(() => {
   const formHash = focusedProblem.value?.constraint;
   return formHash ? stepStore.getForm(formHash) : undefined;
 })
+
+const focusedFormValues = computed(() => {
+  // identify the focused progress step (if any)
+  if (!focusedProblem.value) { return undefined; }
+  const step = stepStore.stepFromProblem(focusedProblem.value);
+  if (step.tag !== 'ProgressStep') { return undefined; }
+
+  return step.evalInfo.formValues;
+})
+
+const focusedBox = computed(() => {
+  const scope = focusedProblem.value?.scope;
+  return scope ? stepStore.getBox(scope) : undefined;
+});
+
+const focusedBoxStr = computed(() => {
+  if (!focusedBox.value) {
+    return 'No box focused';
+  }
+  const varDomains = focusedBox.value.box_.varDomains;
+  const parts = Object.entries(varDomains).map(([v, d]) => {
+    return `${v}: [${d.l}, ${d.u}]`;
+  });
+  return parts.join(', ');
+});
 
 </script>
 
@@ -33,7 +58,15 @@ const topForm = computed(() => {
       </tr>
       <tr>
         <td style="width: calc(100% - 520px);">
-          <FormattedForm :form="topForm" :widthLimit="60" />
+          <span class="d-flex justify-content-center mt-1">
+            Focused problem:
+          </span>
+          <span class="d-flex justify-content-center mt-1">
+            {{ focusedBoxStr }}
+          </span>
+          <span class="d-flex justify-content-center mt-1">
+            <FormattedForm :form="focusedForm" :formValues="focusedFormValues" :widthLimit="60" />
+          </span>
         </td>
       </tr>
     </tbody>

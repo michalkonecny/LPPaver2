@@ -49,7 +49,7 @@ export const binaryOpSymbolMap: Record<BinaryOp, string> = {
   'OpDivide': '/'
 }
 
-export type ExprHash = number
+export type ExprHash = string
 export type ExprDict = Record<ExprHash, ExprF<ExprHash>>
 
 export function exprHashToExpr(exprHash: ExprHash, dict: ExprDict): Expr {

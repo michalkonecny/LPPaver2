@@ -7,7 +7,7 @@ module LPPaver2.RealConstraints.Expr
     UnaryOp (..),
     BinaryOp (..),
     Expr (..),
-    ExprHash,
+    ExprHash (..),
     ExprNode,
     ExprStore,
     exprVar,
@@ -48,7 +48,11 @@ data BinaryOp
   | OpDivide
   deriving (P.Eq, Generic, Hashable)
 
-type ExprHash = Int
+newtype ExprHash = ExprHash {unExprHash :: Int}
+  deriving (P.Eq, P.Ord, Generic)
+
+instance Hashable ExprHash where
+  hash (ExprHash h) = hash h
 
 type ExprNode = ExprF ExprHash
 
@@ -67,7 +71,7 @@ data Expr = Expr {nodes :: ExprStore, root :: ExprHash}
   deriving (Generic, Hashable)
 
 instance P.Eq Expr where
-  e1 == e2 = e1.root == e2.root
+  e1 == e2 = e1.root P.== e2.root
 
 instance Show Expr where
   show expr = (showExprHash expr.root).str
@@ -109,21 +113,21 @@ expr0 :: ExprNode -> Expr
 expr0 e =
   Expr {nodes = Map.singleton root e, root}
   where
-    root = hash e
+    root = ExprHash (hash e)
 
 expr1 :: UnaryOp -> Expr -> Expr
 expr1 unop e1 =
   Expr {nodes = Map.insert h e e1.nodes, root = h}
   where
     e = ExprUnary {unop, e1 = e1.root}
-    h = hash e
+    h = ExprHash (hash e)
 
 expr2 :: BinaryOp -> Expr -> Expr -> Expr
 expr2 binop e1 e2 =
   Expr {nodes = Map.insert h e $ Map.union e1.nodes e2.nodes, root = h}
   where
     e = ExprBinary {binop, e1 = e1.root, e2 = e2.root}
-    h = hash e
+    h = ExprHash (hash e)
 
 exprVar :: Var -> Expr
 exprVar var = expr0 $ ExprVar {var}

@@ -31,9 +31,9 @@ type LPPProblem = BP.Problem Form Box
 
 type LPPPaving = BP.Paving Form Box Boxes
 
-type LPPStep = BP.Step LPPProblem LPPPaving
+type LPPStep r = BP.Step LPPProblem LPPPaving (EvaluatedForm r)
 
-getStepBoxes :: LPPStep -> BoxStore
+getStepBoxes :: LPPStep r -> BoxStore
 getStepBoxes step =
   scopesStore `Map.union` pavingBoxStore
   where
@@ -46,7 +46,7 @@ getStepBoxes step =
     pavingsScopes = [p.scope | p <- pavings]
     pavingBoxStore = Map.unions [paving.inner.store `Map.union` paving.outer.store | paving <- pavings]
 
-getStepExprs :: LPPStep -> ExprStore
+getStepExprs :: LPPStep r -> ExprStore
 getStepExprs step =
   constraintsStore `Map.union` undecidedStore
   where
@@ -60,7 +60,7 @@ getStepExprs step =
     problems = BP.getStepProblems step
     pavings = BP.getStepPavings step
 
-getStepForms :: LPPStep -> FormStore
+getStepForms :: LPPStep r -> FormStore
 getStepForms step =
   constraintsStore `Map.union` undecidedStore `Map.union` basicFormStore
   where
@@ -77,8 +77,8 @@ getStepForms step =
 basicFormStore :: FormStore
 basicFormStore =
   Map.fromList
-    [ (hash (FormTrue :: FormF FormHash), FormTrue),
-      (hash (FormFalse :: FormF FormHash), FormFalse)
+    [ (FormHash (hash (FormTrue :: FormF FormHash)), FormTrue),
+      (FormHash (hash (FormFalse :: FormF FormHash)), FormFalse)
     ]
 
 type LPPBPResult = BP.Result Form Box Boxes
@@ -111,12 +111,12 @@ lppBranchAndPrune ::
     MonadUnliftIOWithState m,
     CanEval r,
     HasKleeneanComparison r,
-    BP.CanControlSteps m LPPStep
+    BP.CanControlSteps m (LPPStep r)
   ) =>
   r ->
   LPPBPParams ->
   m LPPBPResult
-lppBranchAndPrune sampleR (LPPBPParams {..}) = do
+lppBranchAndPrune (sampleR :: r) (LPPBPParams {..}) = do
   -- conn <- liftIO $ Redis.checkedConnect Redis.defaultConnectInfo
   BP.branchAndPruneM
     ( BP.Params
@@ -125,6 +125,7 @@ lppBranchAndPrune sampleR (LPPBPParams {..}) = do
           BP.shouldAbort = const Nothing,
           BP.shouldGiveUpSolvingProblem = shouldGiveUpOnBPLPPProblem giveUpAccuracy :: LPPProblem -> Bool,
           BP.dummyPriorityQueue,
+          BP.dummyEvalInfo = EvaluatedForm {form = formTrue, exprValues = Map.empty, formValues = Map.empty} :: EvaluatedForm r,
           BP.maxThreads,
           BP.shouldLog
         }
@@ -135,9 +136,9 @@ lppBranchAndPrune sampleR (LPPBPParams {..}) = do
 
 instance
   (CanEval r, HasKleeneanComparison r, Applicative m) =>
-  BP.CanPrune m r Form Box Boxes
+  BP.CanPrune m r Form Box Boxes (EvaluatedForm r)
   where
-  pruneProblemM sampleR (BP.Problem {scope, constraint}) = pure pavingP
+  pruneProblemM sampleR (BP.Problem {scope, constraint}) = pure (pavingP, result.evaluatedForm)
     where
       result = simplifyEvalForm sampleR scope constraint
       simplifiedForm = result.evaluatedForm.form

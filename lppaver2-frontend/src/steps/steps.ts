@@ -1,7 +1,7 @@
 import type { Var } from "../formulas/exprs"
 import type { FormHash } from "../formulas/forms"
 
-export type BoxHash = number
+export type BoxHash = string
 
 // Box types
 
@@ -64,8 +64,17 @@ export type InitStep = {
 export type ProgressStep = {
   tag: 'ProgressStep',
   problem: Problem,
-  progressPaving: Paving
+  progressPaving: Paving,
+  evalInfo: EvalInfo,
 }
+
+export type EvalInfo = {
+  formValues: FormValues
+}
+
+export type FormValues = Record<FormHash, Kleenean>
+
+export type Kleenean = 'CertainTrue' | 'CertainFalse' | 'TrueOrFalse';
 
 export function isSplitStep(step: ProgressStep): boolean {
   return step.progressPaving.undecided.length > 1;

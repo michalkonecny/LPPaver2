@@ -1,6 +1,10 @@
 import { exprHashToExpr, type Expr, type ExprDict, type ExprHash } from "./exprs"
 
-export type Form = { f: FormF<Expr, Form> }
+export type Form = { 
+  f: FormF<Expr, Form>,
+  hash: FormHash
+}
+
 
 export type FormF<E, F> = FormComp<E> | FormUnary<F> | FormBinary<F>
   | FormIfThenElse<F> | FormTrue | FormFalse
@@ -61,7 +65,7 @@ export const binaryConnSymbolMap: Record<BinaryConn, string> = {
   'ConnImpl': '→'
 }
 
-export type FormHash = number
+export type FormHash = string
 export type FormDict = Record<FormHash, FormF<ExprHash, FormHash>>
 
 export function formHashToForm(formHash: FormHash, dictF: FormDict, dictE: ExprDict): Form {
@@ -78,7 +82,8 @@ export function formHashToForm(formHash: FormHash, dictF: FormDict, dictE: ExprD
           comp: formF.comp,
           e1: exprHashToExpr(formF.e1, dictE),
           e2: exprHashToExpr(formF.e2, dictE)
-        }
+        },
+        hash: formHash
       };
     case 'FormUnary':
       return {
@@ -86,7 +91,8 @@ export function formHashToForm(formHash: FormHash, dictF: FormDict, dictE: ExprD
           tag: 'FormUnary',
           uconn: formF.uconn,
           f1: formHashToForm(formF.f1, dictF, dictE)
-        }
+        },
+        hash: formHash
       };
     case 'FormBinary':
       return {
@@ -95,7 +101,8 @@ export function formHashToForm(formHash: FormHash, dictF: FormDict, dictE: ExprD
           bconn: formF.bconn,
           f1: formHashToForm(formF.f1, dictF, dictE),
           f2: formHashToForm(formF.f2, dictF, dictE)
-        }
+        },
+        hash: formHash
       };
     case 'FormIfThenElse':
       return {
@@ -104,12 +111,13 @@ export function formHashToForm(formHash: FormHash, dictF: FormDict, dictE: ExprD
           fc: formHashToForm(formF.fc, dictF, dictE),
           ft: formHashToForm(formF.ft, dictF, dictE),
           ff: formHashToForm(formF.ff, dictF, dictE)
-        }
+        },
+        hash: formHash
       };
     case 'FormTrue':
-      return { f: { tag: 'FormTrue' } };
+      return { f: { tag: 'FormTrue' }, hash: formHash };
     case 'FormFalse':
-      return { f: { tag: 'FormFalse' } };
+      return { f: { tag: 'FormFalse' }, hash: formHash };
     default:
       throw new Error(`Unknown form tag: ${(formF as any).tag}`);
   }

@@ -131,10 +131,10 @@ function renderPlot() {
   if (plotDiv.value && !handlerAttached) {
     handlerAttached = true;
     plotDiv.value.on('plotly_click', (data) => {
-      console.log('Plotly click event data:', data);
+      // console.log('Plotly click event data:', data);
       const point = data.points[0];
-      const scope = point?.data.customdata[0] as number | undefined;
-      const constraint = point?.data.customdata[1] as number | undefined;
+      const scope = point?.data.customdata[0] as string | undefined;
+      const constraint = point?.data.customdata[1] as string | undefined;
       if (scope && constraint) {
         focusedProblem.value = { scope, constraint };
       }
