@@ -62,19 +62,19 @@ const layout = reactive<LayoutItem[]>([
   <GridLayout v-model:layout="layout" :colNum="12" :rowHeight="(viewHeight - 40) / 8" :isDraggable="true"
     :isResizable="true" :responsive="false" :useCssTransforms="true">
     <GridItem key="stepTree" i="stepTree" :x="stepTreeLayout.x" :y="stepTreeLayout.y" :w="stepTreeLayout.w"
-      :h="stepTreeLayout.h">
+      :h="stepTreeLayout.h" :isDraggable="false">
       <div class="border w-100 h-100" style="overflow-y: auto;">
         <StepTree />
       </div>
     </GridItem>
     <GridItem key="paving2D" i="paving2D" :x="paving2DLayout.x" :y="paving2DLayout.y" :w="paving2DLayout.w"
-      :h="paving2DLayout.h">
+      :h="paving2DLayout.h" :isDraggable="false">
       <div class="border w-100 h-100" style="overflow-y: auto;">
         <Paving2D :topProblem="stepStore.zoomedProblem" />
       </div>
     </GridItem>
     <GridItem key="focusedP" i="focusedP" :x="focusedPLayout.x" :y="focusedPLayout.y" :w="focusedPLayout.w"
-      :h="focusedPLayout.h">
+      :h="focusedPLayout.h" :isDraggable="false">
       <div class="border w-100 h-100" style="overflow-y: auto;">
         <span class="d-flex justify-content-center mt-1">
           Focused problem:

@@ -101,15 +101,16 @@ function getAxisLayout(v: Var): Partial<Plotly.LayoutAxis> {
     // title: { text: v },
     zeroline: false,
     showgrid: false,
+    automargin: true,
   };
 };
 
 const layout = computed<Partial<Plotly.Layout>>(() => ({
   autosize: true,
   uirevision: -1,
-  xaxis: getAxisLayout(xVar.value),
-  yaxis: getAxisLayout(yVar.value),
-  margin: { t: 20, b: 40, l: 40, r: 20 },
+  xaxis: { ...getAxisLayout(xVar.value) },
+  yaxis: { ...getAxisLayout(yVar.value) },
+  margin: { t: 5, b: 5, l: 5, r: 5 },
   shapes: [...getFocusedProblemOutline()],
   // dragmode: "pan",
   dragmode: "zoom",
@@ -150,29 +151,18 @@ onMounted(() => {
 </script>
 
 <template>
-  <table style="width: 500px; height: 500px;">
-    <tbody>
-      <tr>
-        <td style="width: 50px; vertical-align: middle;">
-          <select class="form-select" style="width: min-content;" v-model="yVar">
-            <option v-for="v in topScopeVars" :key="v" :value="v">{{ v }}</option>
-          </select>
-        </td>
-        <td>
-          <div style="width: 450px; height: 450px;" ref="plotDiv"></div>
-        </td>
-      </tr>
-      <tr>
-        <td></td>
-        <td>
-          <div class="w100 d-flex justify-content-center">
-            <select class="form-select" style="width: min-content;" v-model="xVar">
-              <option v-for="v in topScopeVars" :key="v" :value="v">{{ v }}</option>
-            </select>
-          </div>
-        </td>
-      </tr>
-    </tbody>
-  </table>
+  <!-- TODO: make plot resize with grid cell resize -->
+  <div ref="plotDiv" class="w-100" style="height: 80%;"></div>
+  <div class="d-flex p-2 align-items-center border-top">
 
+    <span class="mx-2">Y variable:</span>
+    <select class="form-select" style="width: min-content;" v-model="yVar">
+      <option v-for="v in topScopeVars" :key="v" :value="v">{{ v }}</option>
+    </select>
+
+    <span class="ms-auto me-2">X variable:</span>
+    <select class="form-select me-auto" style="width: min-content;" v-model="xVar">
+      <option v-for="v in topScopeVars" :key="v" :value="v">{{ v }}</option>
+    </select>
+  </div>
 </template>
