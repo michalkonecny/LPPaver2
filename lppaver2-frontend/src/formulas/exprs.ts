@@ -1,6 +1,9 @@
 export type Var = string
 
-export type Expr = { e: ExprF<Expr> }
+export type Expr = { 
+  e: ExprF<Expr>,
+  hash: ExprHash
+}
 
 export type ExprF<E> = ExprVar | ExprLit | ExprUnary<E> | ExprBinary<E>
 
@@ -60,16 +63,17 @@ export function exprHashToExpr(exprHash: ExprHash, dict: ExprDict): Expr {
 
   switch (exprF.tag) {
     case 'ExprVar':
-      return { e: exprF };
+      return { e: exprF, hash: exprHash };
     case 'ExprLit':
-      return { e: exprF };
+      return { e: exprF, hash: exprHash };
     case 'ExprUnary':
       return {
         e: {
           tag: 'ExprUnary',
           unop: exprF.unop,
           e1: exprHashToExpr(exprF.e1, dict)
-        }
+        },
+        hash: exprHash
       };
     case 'ExprBinary':
       return {
@@ -78,7 +82,8 @@ export function exprHashToExpr(exprHash: ExprHash, dict: ExprDict): Expr {
           binop: exprF.binop,
           e1: exprHashToExpr(exprF.e1, dict),
           e2: exprHashToExpr(exprF.e2, dict)
-        }
+        },
+        hash: exprHash
       };
     default:
       throw new Error(`Unknown expression tag: ${(exprF as any).tag}`);

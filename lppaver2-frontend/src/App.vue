@@ -1,48 +1,18 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue';
-import FormattedForm from './formulas/FormattedForm.vue';
 import Paving2D from './paving2D/Paving2D.vue';
 import { useStepsStore } from './steps/stepsStore';
 import StepTree from './steps/StepTree.vue';
 import { storeToRefs } from 'pinia';
 import { GridLayout, GridItem, type LayoutItem } from 'grid-layout-plus'
+import ProblemView from './ProblemView.vue';
+import { type FormOrExprHash } from './formulas/forms';
 
 const stepStore = useStepsStore()
-const { focusedProblem } = storeToRefs(stepStore)
+const { focusedProblem, focusedProblemSubFormExpr } = storeToRefs(stepStore)
 
 stepStore.initSession('default')
 
-const focusedForm = computed(() => {
-  const formHash = focusedProblem.value?.constraint;
-  return formHash ? stepStore.getForm(formHash) : undefined;
-})
-
-const focusedFormValues = computed(() => {
-  // identify the focused progress step (if any)
-  if (!focusedProblem.value) { return undefined; }
-  const step = stepStore.stepFromProblem(focusedProblem.value);
-  if (step.tag !== 'ProgressStep') { return undefined; }
-
-  return step.evalInfo.formValues;
-})
-
-const focusedBox = computed(() => {
-  const scope = focusedProblem.value?.scope;
-  return scope ? stepStore.getBox(scope) : undefined;
-});
-
-const focusedBoxStr = computed(() => {
-  if (!focusedBox.value) {
-    return 'No box focused';
-  }
-  const varDomains = focusedBox.value.box_.varDomains;
-  const parts = Object.entries(varDomains).map(([v, d]) => {
-    return `${v}: [${d.l}, ${d.u}]`;
-  });
-  return parts;
-});
-
-const viewWidth = computed(() => window.innerWidth);
 const viewHeight = computed(() => window.innerHeight - 100);
 
 const stepTreeLayout = reactive<LayoutItem>({ i: 'stepTree', x: 0, y: 0, w: 6, h: 3 });
@@ -56,6 +26,10 @@ const layout = reactive<LayoutItem[]>([
   focusedPLayout,
   focEPlotLayout,
 ]);
+
+function onSubFormExprClicked(data: FormOrExprHash) {
+  focusedProblemSubFormExpr.value = data;
+}
 
 </script>
 
@@ -76,22 +50,13 @@ const layout = reactive<LayoutItem[]>([
     </GridItem>
     <GridItem key="focusedP" i="focusedP" :x="focusedPLayout.x" :y="focusedPLayout.y" :w="focusedPLayout.w"
       :h="focusedPLayout.h" :isDraggable="false">
-      <div class="w-100 h-100" style="overflow-y: auto; border: solid 2px red;">
-        <span class="d-flex flex-column align-items-center mt-1">
-          <span v-for="varRange in focusedBoxStr">
-            {{ varRange }}
-          </span>
-        </span>
-        <span class="d-flex justify-content-center mt-1">
-          <!-- TODO: adjust width dynamically with grid cell size changes -->
-          <FormattedForm :form="focusedForm" :formValues="focusedFormValues" :widthLimit="Math.round(viewWidth / 20)" />
-        </span>
-      </div>
+      <ProblemView :problem="focusedProblem" @click="onSubFormExprClicked"
+        :highlightedSubFormExpr="focusedProblemSubFormExpr ?? undefined" />
     </GridItem>
     <GridItem key="focEPlot" i="focEPlot" :x="focEPlotLayout.x" :y="focEPlotLayout.y" :w="focEPlotLayout.w"
       :h="focEPlotLayout.h" :isDraggable="false">
       <div class="border w-100 h-100" style="overflow-y: auto;">
-        
+
       </div>
     </GridItem>
   </GridLayout>

@@ -1,14 +1,16 @@
 <script lang="ts" setup>
 import { computed, ref, watch, type StyleValue } from 'vue';
-import { binaryOpSymbolMap, unaryOpSymbolMap, type Expr, type RationalLit } from './exprs';
+import { binaryOpSymbolMap, unaryOpSymbolMap, type Expr, type ExprHash, type RationalLit } from './exprs';
 
 const props = defineProps<{
   expr?: Expr;
   widthLimit: number;
+  highlightedExpr?: ExprHash;
 }>();
 
 const emits = defineEmits<{
   (e: 'width', width: number): void;
+  (e: 'click', subExpr: ExprHash): void;
 }>();
 
 ////////////////////////////
@@ -26,7 +28,7 @@ function emitWidthFromString(result: string) {
 
 function formatLit(lit: RationalLit): string {
   const x = lit.numerator / lit.denominator;
-  return x.toLocaleString(undefined, { maximumFractionDigits: 5 });
+  return x.toLocaleString(undefined, { maximumFractionDigits: 8 });
 }
 
 ////////////////////////////
@@ -114,9 +116,20 @@ watch(binaryTotalWidthIfHorizontal, w => {
   }
 });
 
+// send click event for this expression
+function clickedHere(event: MouseEvent) {
+  emits('click', props.expr!.hash);
+  // prevent event bubbling
+  event.stopPropagation();
+}
+
+const isHighlighted = computed(() => {
+  return props.highlightedExpr === props.expr?.hash;
+});
+
 const style = computed<StyleValue>(() => {
   return {
-    'border': '0.5px solid grey',
+    'border': isHighlighted.value ? '1.5px solid #0000FF80' : '0.5px solid grey',
   };
 });
 
@@ -126,7 +139,7 @@ const style = computed<StyleValue>(() => {
   <span v-if="!expr" class="border">
     <em>???</em>
   </span>
-  <span v-if="expr">
+  <span v-if="expr" @click="clickedHere">
     <!-- literals -->
     <span v-if="expr.e.tag === 'ExprLit'" :style="style">
       {{ emitWidthFromString(formatLit(expr.e.lit)) }}
@@ -140,18 +153,21 @@ const style = computed<StyleValue>(() => {
       class="d-flex align-items-center justify-content-center">
       {{ unaryOpSymbol }}
       <span class="px-1">
-        <FormattedExpr :expr="expr.e.e1" :widthLimit="unaryChildWidthLimit" @width="setEWidth" />
+        <FormattedExpr :expr="expr.e.e1" :widthLimit="unaryChildWidthLimit" @width="setEWidth"
+          @click="(e) => emits('click', e)" :highlightedExpr="highlightedExpr" />
       </span>
     </span>
     <!-- binary operators -->
     <span v-else-if="expr.e.tag === 'ExprBinary'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !binaryFitsHorizontal, 'align-items': true }">
       <span class="px-1">
-        <FormattedExpr :expr="expr.e.e1" :widthLimit="binaryChildWidthLimit" @width="setE1Width" />
+        <FormattedExpr :expr="expr.e.e1" :widthLimit="binaryChildWidthLimit" @width="setE1Width"
+          @click="(e) => emits('click', e)" :highlightedExpr="highlightedExpr" />
       </span>
       {{ binaryOpSymbolMap[expr.e.binop] }}
       <span class="`px-1">
-        <FormattedExpr :expr="expr.e.e2" :widthLimit="binaryChildWidthLimit" @width="setE2Width" />
+        <FormattedExpr :expr="expr.e.e2" :widthLimit="binaryChildWidthLimit" @width="setE2Width"
+          @click="(e) => emits('click', e)" :highlightedExpr="highlightedExpr" />
       </span>
     </span>
   </span>

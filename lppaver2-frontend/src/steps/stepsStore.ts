@@ -4,7 +4,7 @@ import {
   type Problem, type ProblemHash, type Step, type Kleenean
 } from './steps'
 import { type ExprHash, type Expr, type ExprF, exprHashToExpr } from '../formulas/exprs'
-import { formHashToForm, type Form, type FormF, type FormHash } from '../formulas/forms'
+import { formHashToForm, type Form, type FormF, type FormHash, type FormOrExprHash } from '../formulas/forms'
 
 export const useStepsStore = defineStore('steps', {
   state: () => ({
@@ -19,6 +19,7 @@ export const useStepsStore = defineStore('steps', {
     _problem2step: {} as Record<ProblemHash, Step>,
     rootProblem: null as Problem | null,
     focusedProblem: null as Problem | null,
+    focusedProblemSubFormExpr: null as FormOrExprHash | null,
     zoomedProblem: null as Problem | null,
   }),
   actions: {

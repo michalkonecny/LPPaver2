@@ -68,6 +68,8 @@ export const binaryConnSymbolMap: Record<BinaryConn, string> = {
 export type FormHash = string
 export type FormDict = Record<FormHash, FormF<ExprHash, FormHash>>
 
+export type FormOrExprHash = { formHash: FormHash } | { exprHash: ExprHash }
+
 export function formHashToForm(formHash: FormHash, dictF: FormDict, dictE: ExprDict): Form {
   const formF = dictF[formHash];
   if (!formF) {
