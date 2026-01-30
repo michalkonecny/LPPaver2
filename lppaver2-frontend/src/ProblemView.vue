@@ -4,6 +4,7 @@ import type { Problem } from './steps/steps';
 import { useStepsStore } from './steps/stepsStore';
 import type { FormOrExprHash } from './formulas/forms';
 import FormattedForm from './formulas/FormattedForm.vue';
+import BoxVarsShow from './boxes/BoxVarsShow.vue';
 
 const props = defineProps<{
   problem: Problem | null;
@@ -19,17 +20,6 @@ const stepsStore = useStepsStore();
 const box = computed(() => {
   const scope = props.problem?.scope;
   return scope ? stepsStore.getBox(scope) : undefined;
-});
-
-const variableRangeStrs = computed(() => {
-  if (!props.problem) {
-    return 'No box focused';
-  }
-  const varDomains = box.value?.box_.varDomains ?? [];
-  const parts = Object.entries(varDomains).map(([v, d]) => {
-    return `${v}: [${d.l}, ${d.u}]`;
-  });
-  return parts;
 });
 
 const form = computed(() => {
@@ -52,11 +42,7 @@ const viewWidth = computed(() => window.innerWidth);
 
 <template>
   <div class="w-100 h-100" style="overflow-y: auto; border: solid 2px red;">
-    <span class="d-flex flex-column align-items-center mt-1">
-      <span v-for="varRange in variableRangeStrs">
-        {{ varRange }}
-      </span>
-    </span>
+    <BoxVarsShow v-if="box" :box="box" class="mb-2" />
     <span class="d-flex justify-content-center mt-1">
       <!-- TODO: adjust width dynamically with grid cell size changes -->
       <FormattedForm :form="form" :formValues="formValues" :widthLimit="Math.round(viewWidth / 20)"

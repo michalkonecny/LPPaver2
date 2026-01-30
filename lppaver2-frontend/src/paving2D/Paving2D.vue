@@ -7,6 +7,7 @@ import Plotly from "plotly.js-dist-min";
 import { getSubProblems, type Problem } from "@/steps/steps";
 import { useStepsStore } from "@/steps/stepsStore";
 import type { Var } from "@/formulas/exprs";
+import { pickXY } from "@/boxes/pickVars";
 
 const props = withDefaults(defineProps<{
   topProblem: Problem | null;
@@ -21,22 +22,19 @@ const { focusedProblem } = storeToRefs(stepsStore);
 const plotDiv = ref<Plotly.PlotlyHTMLElement | null>(null);
 
 const topScopeH = computed(() => props.topProblem?.scope ?? null);
-const topScopeBox = computed(() => !topScopeH.value ? null : stepsStore.getBox(topScopeH.value).box_);
+const topScopeBox = computed(() => !topScopeH.value ? null : stepsStore.getBox(topScopeH.value));
 // const topScopeVarDomains = computed(() => topScopeBox.value?.varDomains ?? {});
-const topScopeVars = computed(() => topScopeBox.value?.splitOrder ?? []);
+const topScopeVars = computed(() => topScopeBox.value?.box_.splitOrder ?? []);
 
-const xVar = ref<Var>(topScopeVars.value[0] || "x");
-const yVar = ref<Var>(topScopeVars.value[1] || "y");
+const xVar = ref<Var>("_x");
+const yVar = ref<Var>("_y");
 
-watch(topScopeVars, vars => {
-  const xVars = vars.filter(v => v.toLowerCase().startsWith("x"));
-  const yVars = vars.filter(v => v.toLowerCase().startsWith("y"));
-  xVar.value = (xVars.length == 1 ? xVars[0] : vars[0]) ?? "_x";
-  yVar.value = (yVars.length == 1 ? yVars[0] : vars[1]) ?? "_y";
-  if (xVar.value === yVar.value) {
-    yVar.value = vars.find(v => v !== xVar.value) || "_y";
-  }
-})
+watch(topScopeBox, (newBox) => {
+  if (!newBox) { return; }
+  const xyVars = pickXY(newBox);
+  xVar.value = xyVars.xVar;
+  yVar.value = xyVars.yVar;
+}, { immediate: true });
 
 function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
   if (!problem) { return []; }

@@ -7,6 +7,7 @@ import { storeToRefs } from 'pinia';
 import { GridLayout, GridItem, type LayoutItem } from 'grid-layout-plus'
 import ProblemView from './ProblemView.vue';
 import { type FormOrExprHash } from './formulas/forms';
+import FormExprPlot from './formulas/FormExprPlot.vue';
 
 const stepStore = useStepsStore()
 const { focusedProblem, focusedProblemSubFormExpr } = storeToRefs(stepStore)
@@ -29,7 +30,7 @@ const layout = reactive<LayoutItem[]>([
 
 function onSubFormExprClicked(data: FormOrExprHash) {
   focusedProblemSubFormExpr.value = data;
-}
+} 
 
 </script>
 
@@ -56,7 +57,7 @@ function onSubFormExprClicked(data: FormOrExprHash) {
     <GridItem key="focEPlot" i="focEPlot" :x="focEPlotLayout.x" :y="focEPlotLayout.y" :w="focEPlotLayout.w"
       :h="focEPlotLayout.h" :isDraggable="false">
       <div class="border w-100 h-100" style="overflow-y: auto;">
-
+        <FormExprPlot v-if="focusedProblemSubFormExpr" :formOrExprHash="focusedProblemSubFormExpr" />
       </div>
     </GridItem>
   </GridLayout>
