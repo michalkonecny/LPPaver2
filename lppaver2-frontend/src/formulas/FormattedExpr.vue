@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, ref, watch, type Ref } from 'vue';
+import { computed, ref, watch, type StyleValue } from 'vue';
 import { binaryOpSymbolMap, unaryOpSymbolMap, type Expr, type RationalLit } from './exprs';
 
 const props = defineProps<{
@@ -114,6 +114,12 @@ watch(binaryTotalWidthIfHorizontal, w => {
   }
 });
 
+const style = computed<StyleValue>(() => {
+  return {
+    'border': '0.5px solid grey',
+  };
+});
+
 </script>
 
 <template>
@@ -122,28 +128,29 @@ watch(binaryTotalWidthIfHorizontal, w => {
   </span>
   <span v-if="expr">
     <!-- literals -->
-    <span v-if="expr.e.tag === 'ExprLit'">
+    <span v-if="expr.e.tag === 'ExprLit'" :style="style">
       {{ emitWidthFromString(formatLit(expr.e.lit)) }}
     </span>
     <!-- variables -->
-    <span v-else-if="expr.e.tag === 'ExprVar'">
+    <span v-else-if="expr.e.tag === 'ExprVar'" :style="style">
       {{ emitWidthFromString(expr.e.var) }}
     </span>
     <!-- unary operators -->
-    <span v-else-if="expr.e.tag === 'ExprUnary'" class="d-flex align-items-center justify-content-center">
+    <span v-else-if="expr.e.tag === 'ExprUnary'" :style="style"
+      class="d-flex align-items-center justify-content-center">
       {{ unaryOpSymbol }}
-      <span class="border px-1">
+      <span class="px-1">
         <FormattedExpr :expr="expr.e.e1" :widthLimit="unaryChildWidthLimit" @width="setEWidth" />
       </span>
     </span>
     <!-- binary operators -->
-    <span v-else-if="expr.e.tag === 'ExprBinary'"
+    <span v-else-if="expr.e.tag === 'ExprBinary'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !binaryFitsHorizontal, 'align-items': true }">
-      <span class="border px-1">
+      <span class="px-1">
         <FormattedExpr :expr="expr.e.e1" :widthLimit="binaryChildWidthLimit" @width="setE1Width" />
       </span>
       {{ binaryOpSymbolMap[expr.e.binop] }}
-      <span class="border px-1">
+      <span class="`px-1">
         <FormattedExpr :expr="expr.e.e2" :widthLimit="binaryChildWidthLimit" @width="setE2Width" />
       </span>
     </span>

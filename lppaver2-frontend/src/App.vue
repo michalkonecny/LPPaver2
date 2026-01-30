@@ -42,9 +42,8 @@ const focusedBoxStr = computed(() => {
   return parts.join(', ');
 });
 
-const viewHeight = computed(() => {
-  return window.innerHeight - 100;
-});
+const viewWidth = computed(() => window.innerWidth);
+const viewHeight = computed(() => window.innerHeight - 100);
 
 const stepTreeLayout = reactive<LayoutItem>({ i: 'stepTree', x: 0, y: 0, w: 6, h: 8 });
 const paving2DLayout = reactive<LayoutItem>({ i: 'paving2D', x: 6, y: 0, w: 6, h: 5 });
@@ -83,7 +82,8 @@ const layout = reactive<LayoutItem[]>([
           {{ focusedBoxStr }}
         </span>
         <span class="d-flex justify-content-center mt-1">
-          <FormattedForm :form="focusedForm" :formValues="focusedFormValues" :widthLimit="60" />
+          <!-- TODO: adjust width dynamically with grid cell size changes -->
+          <FormattedForm :form="focusedForm" :formValues="focusedFormValues" :widthLimit="Math.round(viewWidth / 20)" />
         </span>
       </div>
     </GridItem>
