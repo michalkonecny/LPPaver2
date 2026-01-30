@@ -29,8 +29,13 @@ const xVar = ref<Var>(topScopeVars.value[0] || "x");
 const yVar = ref<Var>(topScopeVars.value[1] || "y");
 
 watch(topScopeVars, vars => {
-  xVar.value = vars[0] ?? "_x"
-  yVar.value = vars[1] ?? "_y"
+  const xVars = vars.filter(v => v.toLowerCase().startsWith("x"));
+  const yVars = vars.filter(v => v.toLowerCase().startsWith("y"));
+  xVar.value = (xVars.length == 1 ? xVars[0] : vars[0]) ?? "_x";
+  yVar.value = (yVars.length == 1 ? yVars[0] : vars[1]) ?? "_y";
+  if (xVar.value === yVar.value) {
+    yVar.value = vars.find(v => v !== xVar.value) || "_y";
+  }
 })
 
 function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
@@ -110,7 +115,7 @@ const layout = computed<Partial<Plotly.Layout>>(() => ({
   uirevision: -1,
   xaxis: { ...getAxisLayout(xVar.value) },
   yaxis: { ...getAxisLayout(yVar.value) },
-  margin: { t: 5, b: 5, l: 5, r: 5 },
+  margin: { t: 5, b: 5, l: 40, r: 5 },
   shapes: [...getFocusedProblemOutline()],
   // dragmode: "pan",
   dragmode: "zoom",
@@ -152,7 +157,7 @@ onMounted(() => {
 
 <template>
   <!-- TODO: make plot resize with grid cell resize -->
-  <div ref="plotDiv" class="w-100" style="height: 80%;"></div>
+  <div ref="plotDiv" class="w-100" style="height: 90%;"></div>
   <div class="d-flex p-2 align-items-center border-top">
 
     <span class="mx-2">Y variable:</span>
