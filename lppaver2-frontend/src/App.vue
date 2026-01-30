@@ -39,20 +39,22 @@ const focusedBoxStr = computed(() => {
   const parts = Object.entries(varDomains).map(([v, d]) => {
     return `${v}: [${d.l}, ${d.u}]`;
   });
-  return parts.join(', ');
+  return parts;
 });
 
 const viewWidth = computed(() => window.innerWidth);
 const viewHeight = computed(() => window.innerHeight - 100);
 
-const stepTreeLayout = reactive<LayoutItem>({ i: 'stepTree', x: 0, y: 0, w: 6, h: 8 });
-const paving2DLayout = reactive<LayoutItem>({ i: 'paving2D', x: 6, y: 0, w: 6, h: 5 });
-const focusedPLayout = reactive<LayoutItem>({ i: 'focusedP', x: 6, y: 5, w: 6, h: 3 });
+const stepTreeLayout = reactive<LayoutItem>({ i: 'stepTree', x: 0, y: 0, w: 6, h: 3 });
+const paving2DLayout = reactive<LayoutItem>({ i: 'paving2D', x: 0, y: 3, w: 6, h: 5 });
+const focusedPLayout = reactive<LayoutItem>({ i: 'focusedP', x: 6, y: 0, w: 6, h: 4 });
+const focEPlotLayout = reactive<LayoutItem>({ i: 'focEPlot', x: 6, y: 4, w: 6, h: 4 });
 
 const layout = reactive<LayoutItem[]>([
   stepTreeLayout,
   paving2DLayout,
   focusedPLayout,
+  focEPlotLayout,
 ]);
 
 </script>
@@ -74,17 +76,22 @@ const layout = reactive<LayoutItem[]>([
     </GridItem>
     <GridItem key="focusedP" i="focusedP" :x="focusedPLayout.x" :y="focusedPLayout.y" :w="focusedPLayout.w"
       :h="focusedPLayout.h" :isDraggable="false">
-      <div class="border w-100 h-100" style="overflow-y: auto;">
-        <span class="d-flex justify-content-center mt-1">
-          Focused problem:
-        </span>
-        <span class="d-flex justify-content-center mt-1">
-          {{ focusedBoxStr }}
+      <div class="w-100 h-100" style="overflow-y: auto; border: solid 2px red;">
+        <span class="d-flex flex-column align-items-center mt-1">
+          <span v-for="varRange in focusedBoxStr">
+            {{ varRange }}
+          </span>
         </span>
         <span class="d-flex justify-content-center mt-1">
           <!-- TODO: adjust width dynamically with grid cell size changes -->
           <FormattedForm :form="focusedForm" :formValues="focusedFormValues" :widthLimit="Math.round(viewWidth / 20)" />
         </span>
+      </div>
+    </GridItem>
+    <GridItem key="focEPlot" i="focEPlot" :x="focEPlotLayout.x" :y="focEPlotLayout.y" :w="focEPlotLayout.w"
+      :h="focEPlotLayout.h" :isDraggable="false">
+      <div class="border w-100 h-100" style="overflow-y: auto;">
+        
       </div>
     </GridItem>
   </GridLayout>
