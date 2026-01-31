@@ -52,17 +52,26 @@ export function getHexTriangulation(xDomainAndN: DomainAndN, yDomainAndN: Domain
         /*
             Create triangles connecting this midpoint row to the rows above and below:
 
-            Prev Full Row :  7----(8)----9-----10
-                              \   / \ x / \   /
-                               \ /   \ / x \ /
-            Midpoint Row  :     4---((5))---6
-                               / \   / \ x / \ 
-                              /   \ / x \ /   \
-            Next Full Row :  0----(1)----2-----3
+            Next Full Row :  7----(8)----9----10
+                             |\   / \ x / \   /|
+                             | \ /   \ / x \ / |
+            Midpoint Row  :  |  4---((5))---6  |
+                             | / \   / \ x / \ |
+                             |/   \ / x \ /   \|
+            Prev Full Row :  0----(1)----2-----3
         */
         const currentPtIdx = x.length - 1;     // ((5)) in diagram
         const prevRowPt1Idx = currentPtIdx - xFullRowLength; // (1) in diagram
         const nextRowPt1Idx = currentPtIdx + xMidRowLength;  // (8) in diagram
+        const haveNextRow = yIdx < ySamples.withEndpoints.length - 1;
+
+        // left edge triangle (if on the edge) 
+        if (xIdx == 0 && haveNextRow) {
+          // first midpoint in row: create triangle to the left towards next row
+          i.push(prevRowPt1Idx);      // 0 in diagram
+          j.push(currentPtIdx);       // 4 in diagram
+          k.push(nextRowPt1Idx);      // 7 in diagram
+        }
 
         // triangles with one vertex at current midpoint row
         // triangle to prev row
@@ -70,7 +79,7 @@ export function getHexTriangulation(xDomainAndN: DomainAndN, yDomainAndN: Domain
         j.push(currentPtIdx);       // ((5)) in diagram
         k.push(prevRowPt1Idx + 1);  // 2 in diagram
         // triangle to next row (if present)
-        if (yIdx < ySamples.withEndpoints.length - 1) {
+        if (haveNextRow) {
           i.push(nextRowPt1Idx);      // (8) in diagram
           j.push(currentPtIdx);       // ((5)) in diagram
           k.push(nextRowPt1Idx + 1);  // 9 in diagram
@@ -83,11 +92,19 @@ export function getHexTriangulation(xDomainAndN: DomainAndN, yDomainAndN: Domain
           j.push(currentPtIdx + 1);   // 6 in diagram
           k.push(prevRowPt1Idx + 1);  // 2 in diagram
           // triangle to the right towards the next row (if present)
-          if (yIdx < ySamples.withEndpoints.length - 1) {
+          if (haveNextRow) {
             i.push(currentPtIdx);       // ((5)) in diagram
             j.push(currentPtIdx + 1);   // 6 in diagram
             k.push(nextRowPt1Idx + 1);  // 9 in diagram
           }
+        }
+
+        // right edge triangle (if on the edge) 
+        if (xIdx == xSamples.midpoints.length - 1 && haveNextRow) {
+          // first midpoint in row: create triangle to the left towards next row
+          i.push(prevRowPt1Idx + 1);  // 3 in diagram
+          j.push(currentPtIdx);       // 6 in diagram
+          k.push(nextRowPt1Idx + 1);  // 10 in diagram
         }
       });
     }
