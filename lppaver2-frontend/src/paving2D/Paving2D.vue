@@ -47,7 +47,6 @@ function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
 
   // get this problem's box shape
   const box = stepsStore.getBox(problem.scope);
-  const constraint = stepsStore.getForm(problem.constraint);
   const varDomains = box.box_.varDomains;
   const x0 = varDomains[xVar.value]?.l ?? 0;
   const x1 = varDomains[xVar.value]?.u ?? 0;

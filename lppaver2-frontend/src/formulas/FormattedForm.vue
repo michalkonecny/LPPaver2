@@ -230,24 +230,17 @@ watch(iteTotalWidthIfHorizontal, w => {
 
 // send click event for this expression
 function clickedHere(event: MouseEvent) {
-  emits('click', { formHash: props.form!.hash });
+  emits('click', { type: "form", formHash: props.form!.hash });
   // prevent event bubbling
   event.stopPropagation();
 }
 
-const isHighlighted = computed(() => {
-  if (!_.has(props.highlightedSubFormExpr, 'formHash')) {
-    return false;
-  }
-  return props.highlightedSubFormExpr.formHash === props.form?.hash;
-});
+const isHighlighted = computed(() =>
+  props.highlightedSubFormExpr?.type == 'form'
+  && props.highlightedSubFormExpr.formHash === props.form?.hash);
 
-const highlightedSubExpr = computed(() => {
-  if (!_.has(props.highlightedSubFormExpr, 'exprHash')) {
-    return undefined;
-  }
-  return props.highlightedSubFormExpr.exprHash as ExprHash;
-});
+const highlightedSubExpr = computed(() =>
+  props.highlightedSubFormExpr?.type === 'expr' ? props.highlightedSubFormExpr.exprHash : undefined);
 
 const style = computed<StyleValue>(() => {
   return {
@@ -271,12 +264,12 @@ const style = computed<StyleValue>(() => {
       :class="{ 'd-flex': true, 'flex-column': !binaryCompFitsHorizontal, 'align-items-center': true }">
       <span class="px-1">
         <FormattedExpr :expr="form.f.e1" :widthLimit="binaryCompChildWidthLimit" @width="setE1Width"
-          @click="(e) => emits('click', { exprHash: e })" :highlightedExpr="highlightedSubExpr" />
+          @click="(e) => emits('click', { type: 'expr', exprHash: e })" :highlightedExpr="highlightedSubExpr" />
       </span>
       {{ binaryCompSymbol }}
       <span class="px-1">
         <FormattedExpr :expr="form.f.e2" :widthLimit="binaryCompChildWidthLimit" @width="setE2Width"
-          @click="(e) => emits('click', { exprHash: e })" :highlightedExpr="highlightedSubExpr" />
+          @click="(e) => emits('click', { type: 'expr', exprHash: e })" :highlightedExpr="highlightedSubExpr" />
       </span>
     </span>
     <!-- unary logical connectors -->

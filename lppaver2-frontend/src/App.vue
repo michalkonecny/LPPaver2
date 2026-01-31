@@ -14,12 +14,15 @@ const { focusedProblem, focusedProblemSubFormExpr } = storeToRefs(stepStore)
 
 stepStore.initSession('default')
 
+const focusedScopeH = computed(() => focusedProblem.value?.scope ?? null);
+const focusedScopeBox = computed(() => !focusedScopeH.value ? null : stepStore.getBox(focusedScopeH.value));
+
 const viewHeight = computed(() => window.innerHeight - 100);
 
 const stepTreeLayout = reactive<LayoutItem>({ i: 'stepTree', x: 0, y: 0, w: 6, h: 3 });
 const paving2DLayout = reactive<LayoutItem>({ i: 'paving2D', x: 0, y: 3, w: 6, h: 5 });
-const focusedPLayout = reactive<LayoutItem>({ i: 'focusedP', x: 6, y: 0, w: 6, h: 4 });
-const focEPlotLayout = reactive<LayoutItem>({ i: 'focEPlot', x: 6, y: 4, w: 6, h: 4 });
+const focusedPLayout = reactive<LayoutItem>({ i: 'focusedP', x: 6, y: 0, w: 6, h: 3 });
+const focEPlotLayout = reactive<LayoutItem>({ i: 'focEPlot', x: 6, y: 3, w: 6, h: 5 });
 
 const layout = reactive<LayoutItem[]>([
   stepTreeLayout,
@@ -30,7 +33,7 @@ const layout = reactive<LayoutItem[]>([
 
 function onSubFormExprClicked(data: FormOrExprHash) {
   focusedProblemSubFormExpr.value = data;
-} 
+}
 
 </script>
 
@@ -57,7 +60,8 @@ function onSubFormExprClicked(data: FormOrExprHash) {
     <GridItem key="focEPlot" i="focEPlot" :x="focEPlotLayout.x" :y="focEPlotLayout.y" :w="focEPlotLayout.w"
       :h="focEPlotLayout.h" :isDraggable="false">
       <div class="border w-100 h-100" style="overflow-y: auto;">
-        <FormExprPlot v-if="focusedProblemSubFormExpr" :formOrExprHash="focusedProblemSubFormExpr" />
+        <FormExprPlot v-if="focusedProblemSubFormExpr" :formOrExprHash="focusedProblemSubFormExpr"
+          :box="focusedScopeBox ?? undefined" />
       </div>
     </GridItem>
   </GridLayout>
