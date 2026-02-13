@@ -3,9 +3,8 @@ import { binaryCompSymbolMap, binaryConnSymbolMap, unaryConnSymbolMap, type Form
 import { computed, ref, watch, type StyleValue } from 'vue';
 import type { FormValues } from '@/steps/steps';
 import FormattedExpr from './FormattedExpr.vue';
-import { getTruthColour } from '@/steps/stepsStore';
+import { getTruthColour, useStepsStore } from '@/steps/stepsStore';
 import _ from 'lodash';
-import type { ExprHash } from './exprs';
 
 const props = defineProps<{
   form?: Form;
@@ -32,7 +31,13 @@ const truthValue = computed(() => {
   if (!props.form || !props.formValues) {
     return null;
   }
-  return props.formValues[props.form.hash];
+  const h = props.form.hash;
+  const stepsStore = useStepsStore();
+  const formTrueHash = stepsStore.formTrueHash;
+  const formFalseHash = stepsStore.formFalseHash;
+  if (h === formTrueHash) { return 'CertainTrue'; }
+  if (h === formFalseHash) { return 'CertainFalse'; }
+  return props.formValues[h];
 })
 
 const colour = computed(() => getTruthColour(truthValue.value ?? 'TrueOrFalse'));
