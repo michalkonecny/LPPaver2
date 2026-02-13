@@ -6,9 +6,10 @@ import type { Box } from '@/steps/steps';
 import type { Var } from './exprs';
 import { pickXY } from '@/boxes/pickVars';
 import _ from 'lodash';
-import { useStepsStore } from '@/steps/stepsStore';
+import { getTruthColour, useStepsStore } from '@/steps/stepsStore';
 import { getHexTriangulation, type DomainAndN, type Triangulation2D } from './mesh';
-import { evalFPExpr } from "./evalFP";
+import { evalFPExpr, evalFPForm } from "./evalFP";
+import { kleeneanSwitch } from "./kleenean";
 
 const props = defineProps<{
   formOrExprHash: FormOrExprHash | undefined;
@@ -30,20 +31,44 @@ watch(() => props.box, () => {
   yVar.value = xyVars.yVar;
 }, { immediate: true });
 
-const numberOfSamplesPerVar = 31;
+const numberOfSamplesPerVar = 99;
+
+const xVarDomain = computed(() => {
+  if (!props.box) { return undefined; }
+  return props.box.box_.varDomains[xVar.value];
+});
+
+const yVarDomain = computed(() => {
+  if (!props.box) { return undefined; }
+  return props.box.box_.varDomains[yVar.value];
+});
+
+const domainWidth = computed(() => {
+  if (!xVarDomain.value || !yVarDomain.value) { return 0; }
+  const xWidth = (xVarDomain.value.u) - (xVarDomain.value.l);
+  const yWidth = (yVarDomain.value.u) - (yVarDomain.value.l);
+  return Math.max(xWidth, yWidth);
+});
 
 const boxTriangulation = computed<Triangulation2D | undefined>(() => {
   if (!props.box) { return undefined; }
 
   const varDomains = props.box.box_.varDomains;
-  const xVarDomain = varDomains[xVar.value];
-  const yVarDomain = varDomains[yVar.value];
-  if (!xVarDomain || !yVarDomain) { return undefined; }
+  if (!xVarDomain.value || !yVarDomain.value) { return undefined; }
 
-  const xDomainAndN: DomainAndN = { domain: xVarDomain, n: numberOfSamplesPerVar };
-  const yDomainAndN: DomainAndN = { domain: yVarDomain, n: numberOfSamplesPerVar };
+  const xDomainAndN: DomainAndN = { domain: xVarDomain.value, n: numberOfSamplesPerVar };
+  const yDomainAndN: DomainAndN = { domain: yVarDomain.value, n: numberOfSamplesPerVar };
 
   return getHexTriangulation(xDomainAndN, yDomainAndN);
+});
+
+/** eval environments for each sampled point in the triangulation */
+const evalEnvs = computed(() => {
+  const triangulation = boxTriangulation.value;
+  if (!triangulation) { return []; }
+
+  return _.zipWith(triangulation.x, triangulation.y, (x, y) =>
+    ({ [xVar.value]: x, [yVar.value]: y }));
 });
 
 const form = computed(() => {
@@ -60,23 +85,43 @@ const plotData = computed<Partial<Plotly.Data>[]>(() => {
   const triangulation = boxTriangulation.value;
   const f = form.value;
   const e = expr.value;
-  if (!f && !e || !triangulation) { return []; }
+  if (!f && !e || e && f || !triangulation) { return []; }
 
   let z: Plotly.Datum[] = [];
+  let colorscale: Plotly.ColorScale = [];
 
   if (f) {
-    z = triangulation.x.map(() => 0) // flat on z=0 plane for now
-  } 
-  if (e) {
-    // eval environments for each sampled point
-    const evalEnvs = _.zipWith(triangulation.x, triangulation.y, (x, y) =>
-      ({ [xVar.value]: x, [yVar.value]: y }));
-
-    z = evalEnvs.map(env => evalFPExpr(e, env));
+    const boolHeight = domainWidth.value / 10;
+    z = evalEnvs.value.map(env =>
+      kleeneanSwitch(evalFPForm(f, env), boolHeight, 0, -boolHeight));
+    const zHasTrue = z.some(v => (v as number) > 0);
+    const zHas0 = z.some(v => (v as number) === 0);
+    const zHasFalse = z.some(v => (v as number) < 0);
+    if (zHasTrue && zHasFalse) {
+      colorscale = [[0, getTruthColour("CertainFalse")], [0.5, getTruthColour("TrueOrFalse")], [1, getTruthColour("CertainTrue")]];
+    } else if (zHasTrue && zHas0) {
+      colorscale = [[0, getTruthColour("TrueOrFalse")], [1, getTruthColour("CertainTrue")]];
+    } else if (zHasFalse && zHas0) {
+      colorscale = [[0, getTruthColour("CertainFalse")], [1, getTruthColour("TrueOrFalse")]];
+    } else if (zHasTrue) {
+      colorscale = [[0, getTruthColour("CertainTrue")], [1, getTruthColour("CertainTrue")]];
+    } else if (zHasFalse) {
+      colorscale = [[0, getTruthColour("CertainFalse")], [1, getTruthColour("CertainFalse")]];
+    } else {
+      colorscale = [[0, getTruthColour("TrueOrFalse")], [1, getTruthColour("TrueOrFalse")]];
+    }
   }
-  const trace: Partial<Plotly.Data> = {
+  if (e) {
+    z = evalEnvs.value.map(env => evalFPExpr(e, env));
+    colorscale = [[0, 'rgb(0,0,200)'], [1, 'rgb(0,200,200)']];
+  }
+  const trace: Partial<Plotly.Data & { intensity: any }> = { // intensity is missing in the type defs
     type: "mesh3d",
     z,
+    intensity: z,
+    colorscale,
+    showlegend: false,
+    showscale: false,
     ...triangulation,
   };
   return [trace];
@@ -99,7 +144,7 @@ const layout = computed<Partial<Plotly.Layout>>(() => ({
     yaxis: { ...getAxisLayout(yVar.value) },
     zaxis: { ...getAxisLayout("value") },
   },
-  margin: { t: 5, b: 5, l: 40, r: 5 },
+  margin: { t: 5, b: 5, l: 5, r: 5 },
 }));
 
 let handlerAttached = false;
