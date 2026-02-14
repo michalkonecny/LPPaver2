@@ -189,6 +189,20 @@ formComp comp e1 e2 =
     e = FormComp {comp, e1 = e1.root, e2 = e2.root}
     h = FormHash (hash e)
 
+{-| Negate a form.  If the form is a comparison, flip the comparison, assuming the order is linear. -}
+formNegComp :: Form -> Form
+formNegComp form =
+  case lookupFormNode form form.root of
+    FormComp {comp, e1, e2} ->
+      -- e.g. not (x ≤ y) is equivalent to y < x, so we flip the order of e1 and e2 and switch the strictness.
+      formComp (flipStrictness comp) (Expr {nodes = form.nodesE, root = e2}) (Expr {nodes = form.nodesE, root = e1})
+      where
+        flipStrictness CompLe = CompLeq
+        flipStrictness CompLeq = CompLe
+        flipStrictness CompEq = CompNeq
+        flipStrictness CompNeq = CompEq
+    _ -> formNeg form
+
 formTrue :: Form
 formTrue = form0 FormTrue
 
@@ -226,7 +240,7 @@ formImpl :: Form -> Form -> Form
 formImpl = form2 ConnImpl
 
 instance CanNeg Form where
-  negate = formNeg
+  negate = formNegComp -- assuming the order is linear, this is more efficient than formNeg
 
 instance CanAndOrAsymmetric Form Form where
   type AndOrType Form Form = Form
