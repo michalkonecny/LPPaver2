@@ -35,15 +35,6 @@ function onSubFormExprClicked(data: FormOrExprHash) {
   focusedProblemSubFormExpr.value = data;
 }
 
-const focusedExprValue = computed(() => {
-  if (!focusedExprValues.value) return undefined;
-
-  const focusedExpr = focusedProblemSubFormExpr.value;
-  if (!focusedExpr || focusedExpr.type !== "expr") return undefined;
-
-  return focusedExprValues.value[focusedExpr.exprHash];
-});
-
 </script>
 
 <template>
@@ -70,7 +61,7 @@ const focusedExprValue = computed(() => {
       :h="focEPlotLayout.h" :isDraggable="false">
       <div class="border w-100 h-100" style="overflow-y: auto;">
         <FormExprPlot v-if="focusedProblemSubFormExpr" :formOrExprHash="focusedProblemSubFormExpr"
-          :box="focusedScopeBox ?? undefined" :exprValue="focusedExprValue" />
+          :box="focusedScopeBox ?? undefined" :exprValues="focusedExprValues" />
       </div>
     </GridItem>
   </GridLayout>

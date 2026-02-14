@@ -2,8 +2,8 @@
 import Plotly, { type ColorScale } from "plotly.js-dist-min";
 import { computed, onMounted, ref, watch } from 'vue';
 import { type FormOrExprHash } from './forms';
-import { exprValueIsInterval, type Box, type ExprValue } from '@/steps/steps';
-import type { Var } from './exprs';
+import { exprValueIsAffineForm, exprValueIsInterval, type Box, type ExprValue } from '@/steps/steps';
+import { getExprVarExprs, type Var } from './exprs';
 import { pickXY } from '@/boxes/pickVars';
 import _ from 'lodash';
 import { getTruthColour, useStepsStore } from '@/steps/stepsStore';
@@ -14,7 +14,7 @@ import { kleeneanSwitch } from "./kleenean";
 const props = defineProps<{
   formOrExprHash: FormOrExprHash | undefined;
   box: Box | undefined;
-  exprValue?: ExprValue;
+  exprValues?: Record<string, ExprValue>;
 }>();
 
 const plotDiv = ref<HTMLDivElement | null>(null);
@@ -139,39 +139,95 @@ function getFPValueTrace(): Trace[] {
   }];
 }
 
+const exprValue = computed(() => {
+  if (!expr.value) return undefined;
+  if (!props.exprValues) return undefined;
+
+  return props.exprValues[expr.value.hash];
+});
+
+const epxrValueBounds = computed(() => {
+  const eValue = exprValue.value;
+  if (!eValue) return undefined;
+  const triang = cornersOnlyTriangulation.value;
+  if (!triang) return undefined;
+
+  if (exprValueIsInterval(eValue)) {
+    const l: number[] = Array(triang.x.length).fill(eValue.l);
+    const u: number[] = Array(triang.x.length).fill(eValue.u);
+    return { l, u };
+  }
+
+  if (exprValueIsAffineForm(eValue)) {
+    if (!props.exprValues) return undefined;
+    // work out which var expr corresponds to x and y
+    const varExprs = getExprVarExprs(expr.value!);
+    const xExprHash = varExprs[xVar.value]?.hash;
+    const yExprHash = varExprs[yVar.value]?.hash;
+    // lookup the affine error term IDs corresponding to x and y
+    const xExprValue = xExprHash ? props.exprValues[xExprHash] : undefined;
+    const yExprValue = yExprHash ? props.exprValues[yExprHash] : undefined;
+    // If expr value is an affine form, also the value for x and y will be affine forms.
+    // The affine form for a variable will have a single error term, whose key is the variable's ID.
+    const xErrId = xExprValue && exprValueIsAffineForm(xExprValue) ? _.keys(xExprValue.errTerms)[0] : undefined;
+    const yErrId = yExprValue && exprValueIsAffineForm(yExprValue) ? _.keys(yExprValue.errTerms)[0] : undefined;
+
+    const xErrCoeff: number = xErrId ? eValue.errTerms[xErrId] ?? 0 : 0;
+    const yErrCoeff: number = yErrId ? eValue.errTerms[yErrId] ?? 0 : 0;
+    const otherErrCoeffs: number[] = Object.entries(eValue.errTerms)
+      .filter(([errId, _]) => errId !== xErrId && errId !== yErrId)
+      .map(([_, coeff]) => coeff);
+    const otherErrSum = _.sum(otherErrCoeffs.map(Math.abs));
+
+    function xToUnit(x?: number): number {
+      const xDom = xVarDomain.value;
+      if (!xDom) return 0;
+      const c = (xDom.l + xDom.u) / 2;
+      return 2 * ((x ?? c) - c) / (xDom.u - xDom.l);
+    }
+
+    function yToUnit(y?: number): number {
+      const yDom = yVarDomain.value;
+      if (!yDom) return 0;
+      const c = (yDom.l + yDom.u) / 2;
+      return 2 * ((y ?? c) - c) / (yDom.u - yDom.l);
+    }
+
+    const c = triang.x.map((_, i) =>
+      eValue.center
+      + xErrCoeff * xToUnit(triang.x[i])
+      + yErrCoeff * yToUnit(triang.y[i]));
+    const l = c.map(v => v - otherErrSum);
+    const u = c.map(v => v + otherErrSum);
+    return { l, u };
+  }
+
+  return undefined;
+});
+
 function getBoundsTraces(): Trace[] {
   const triangulation = cornersOnlyTriangulation.value;
   const e = expr.value;
-  const eValue = props.exprValue;
-  if (!triangulation || !e || !eValue) { return []; }
+  const eValue = exprValue.value;
+  if (!triangulation || !e || !eValue || !epxrValueBounds.value) { return []; }
 
-  if (exprValueIsInterval(eValue)) {
-    const { l, u } = eValue;
-    const colorscale: ColorScale = [[0, 'rgb(200,100,100)'], [1, 'rgb(200,100,100)']];
-    const lBoundTrace: Trace = {
+  const colorscale: ColorScale = [[0, 'rgb(200,100,100)'], [1, 'rgb(200,100,100)']];
+  const { l, u } = epxrValueBounds.value;
+  function mkBoundTrace(z: Plotly.Datum[]): Trace {
+    return {
       type: "mesh3d",
-      z: Array(triangulation.x.length).fill(l),
+      z,
       colorscale,
-      intensity: Array(triangulation.x.length).fill(l),
+      intensity: Array(z.length).fill(0),
       opacity: 0.5,
       showlegend: false,
       showscale: false,
       ...triangulation,
     };
-    const uBoundTrace: Trace = {
-      type: "mesh3d",
-      z: Array(triangulation.x.length).fill(u),
-      colorscale,
-      intensity: Array(triangulation.x.length).fill(u),
-      opacity: 0.5,
-      showlegend: false,
-      showscale: false,
-      ...triangulation,
-    };
-    return [lBoundTrace, uBoundTrace];
-  }
-
-  return [];
+  };
+  const lBoundTrace: Trace = mkBoundTrace(l);
+  const uBoundTrace: Trace = mkBoundTrace(u);
+  return [lBoundTrace, uBoundTrace];
 }
 
 const plotData = computed<Trace[]>(() => {

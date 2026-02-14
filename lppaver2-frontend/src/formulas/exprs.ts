@@ -1,9 +1,21 @@
-export type Var = string
-
-export type Expr = { 
+export type Expr = {
   e: ExprF<Expr>,
   hash: ExprHash
 }
+
+export function getExprVarExprs(expr: Expr): Record<Var, Expr> {
+  switch (expr.e.tag) {
+    case 'ExprVar':
+      return { [expr.e.var]: expr };
+    case 'ExprLit':
+      return {};
+    case 'ExprUnary':
+      return getExprVarExprs(expr.e.e1);
+    case 'ExprBinary':
+      return { ...getExprVarExprs(expr.e.e1), ...getExprVarExprs(expr.e.e2) };
+  }
+}
+export type Var = string
 
 export type ExprF<E> = ExprVar | ExprLit | ExprUnary<E> | ExprBinary<E>
 
