@@ -230,9 +230,9 @@ simplifyEvalForm (sapleR :: r) box formInit =
                     buildResult oldToNew1 h (EvaluatedForm {form = f, exprValues = exprValues1, formValues})
                   decision1 = getFormDecision simplifiedF1
                in case decision1 of
-                    CertainTrue -> buildR formFalse -- negating
-                    CertainFalse -> buildR formTrue -- negating
-                    _ -> buildR (negate simplifiedF1)
+                    CertainTrue -> buildR formFalse -- negating literal "true"
+                    CertainFalse -> buildR formTrue -- negating literal "false"
+                    _ -> buildR (not simplifiedF1) -- if undecided, try to flip comparisons (e.g. "not (x <= y)" can be simplified to "x > y")
             FormBinary binaryConn f1H f2H ->
               let result1 = simplifyH result0 f1H
                   (simplifiedF1, _, _, _) = flattenResult result1
@@ -284,9 +284,13 @@ simplifyEvalForm (sapleR :: r) box formInit =
                                _ -> TrueOrFalse -- overriden to true/false in some cases below 
                in case (decisionC, decisionT, decisionF) of
                     (CertainTrue, _, _) -> buildR decisionT simplifiedT -- "then" branch
-                    (CertainFalse, _, _) -> buildR  decisionF simplifiedF -- "else" branch
+                    (CertainFalse, _, _) -> buildR decisionF simplifiedF -- "else" branch
                     (_, CertainTrue, CertainTrue) -> buildR CertainTrue formTrue -- undecided but both branches "true"
                     (_, CertainFalse, CertainFalse) -> buildR CertainFalse formFalse -- undecided but both branches "false"
-                    _ -> buildR decisionCTF $ formIfThenElse simplifiedC simplifiedT simplifiedF -- undecided, keep if-then-else
+                    (_, CertainTrue, _) -> buildR decisionCTF $ simplifiedC || simplifiedF -- "then" branch is "true", so we can simplify to "C or F"
+                    (_, CertainFalse, _) -> buildR decisionCTF $ not simplifiedC && simplifiedF -- "then" branch is "false", so we can simplify to "not C and F"
+                    (_, _, CertainTrue) -> buildR decisionCTF $ not simplifiedC || simplifiedT -- "else" branch is "true", so we can simplify to "not C or T"
+                    (_, _, CertainFalse) -> buildR decisionCTF $ simplifiedC && simplifiedT -- "else" branch is "false", so we can simplify to "C and T"
+                    _ -> buildR decisionCTF $ formIfThenElse simplifiedC simplifiedT simplifiedF -- no part decided, keep if-then-else
             FormTrue -> error "Internal error: FormTrue case should be caught earlier"
             FormFalse -> error "Internal error: FormFalse case should be caught earlier"

@@ -1,3 +1,4 @@
+import type { Kleenean } from "@/formulas/kleenean"
 import type { Var } from "../formulas/exprs"
 import type { FormHash } from "../formulas/forms"
 
@@ -73,8 +74,6 @@ export type EvalInfo = {
 }
 
 export type FormValues = Record<FormHash, Kleenean>
-
-export type Kleenean = 'CertainTrue' | 'CertainFalse' | 'TrueOrFalse';
 
 export function isSplitStep(step: ProgressStep): boolean {
   return step.progressPaving.undecided.length > 1;

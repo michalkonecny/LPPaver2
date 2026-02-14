@@ -1,18 +1,21 @@
 <script lang="ts" setup>
-import { binaryCompSymbolMap, binaryConnSymbolMap, unaryConnSymbolMap, type Form } from './forms';
+import { binaryCompSymbolMap, binaryConnSymbolMap, unaryConnSymbolMap, type Form, type FormOrExprHash } from './forms';
 import { computed, ref, watch, type StyleValue } from 'vue';
 import type { FormValues } from '@/steps/steps';
 import FormattedExpr from './FormattedExpr.vue';
-import { getTruthColour } from '@/steps/stepsStore';
+import { getTruthColour, useStepsStore } from '@/steps/stepsStore';
+import _ from 'lodash';
 
 const props = defineProps<{
   form?: Form;
   formValues?: FormValues;
   widthLimit: number;
+  highlightedSubFormExpr?: FormOrExprHash;
 }>();
 
 const emits = defineEmits<{
   (e: 'width', width: number): void;
+  (e: 'click', data: FormOrExprHash): void;
 }>();
 
 function emitWidth(width: number) {
@@ -28,7 +31,13 @@ const truthValue = computed(() => {
   if (!props.form || !props.formValues) {
     return null;
   }
-  return props.formValues[props.form.hash];
+  const h = props.form.hash;
+  const stepsStore = useStepsStore();
+  const formTrueHash = stepsStore.formTrueHash;
+  const formFalseHash = stepsStore.formFalseHash;
+  if (h === formTrueHash) { return 'CertainTrue'; }
+  if (h === formFalseHash) { return 'CertainFalse'; }
+  return props.formValues[h];
 })
 
 const colour = computed(() => getTruthColour(truthValue.value ?? 'TrueOrFalse'));
@@ -224,10 +233,24 @@ watch(iteTotalWidthIfHorizontal, w => {
   }
 });
 
+// send click event for this expression
+function clickedHere(event: MouseEvent) {
+  emits('click', { type: "form", formHash: props.form!.hash });
+  // prevent event bubbling
+  event.stopPropagation();
+}
+
+const isHighlighted = computed(() =>
+  props.highlightedSubFormExpr?.type == 'form'
+  && props.highlightedSubFormExpr.formHash === props.form?.hash);
+
+const highlightedSubExpr = computed(() =>
+  props.highlightedSubFormExpr?.type === 'expr' ? props.highlightedSubFormExpr.exprHash : undefined);
+
 const style = computed<StyleValue>(() => {
   return {
     'backgroundColor': colour.value,
-    'border': '0.5px solid grey',
+    'border': isHighlighted.value ? '1.5px solid blue' : '0.5px solid grey',
   };
 });
 
@@ -237,7 +260,7 @@ const style = computed<StyleValue>(() => {
   <span v-if="!form" class="border">
     <em>???</em>
   </span>
-  <span v-else>
+  <span v-else @click="clickedHere">
     <!-- literal formulas True / False -->
     <span v-if="form.f.tag === 'FormTrue'" :style="style">{{ emitWidthFromString('True') }}</span>
     <span v-else-if="form.f.tag === 'FormFalse'" :style="style">{{ emitWidthFromString('False') }}</span>
@@ -245,29 +268,35 @@ const style = computed<StyleValue>(() => {
     <span v-else-if="form.f.tag === 'FormComp'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !binaryCompFitsHorizontal, 'align-items-center': true }">
       <span class="px-1">
-        <FormattedExpr :expr="form.f.e1" :widthLimit="binaryCompChildWidthLimit" @width="setE1Width" />
+        <FormattedExpr :expr="form.f.e1" :widthLimit="binaryCompChildWidthLimit" @width="setE1Width"
+          @click="(e) => emits('click', { type: 'expr', exprHash: e })" :highlightedExpr="highlightedSubExpr" />
       </span>
       {{ binaryCompSymbol }}
       <span class="px-1">
-        <FormattedExpr :expr="form.f.e2" :widthLimit="binaryCompChildWidthLimit" @width="setE2Width" />
+        <FormattedExpr :expr="form.f.e2" :widthLimit="binaryCompChildWidthLimit" @width="setE2Width"
+          @click="(e) => emits('click', { type: 'expr', exprHash: e })" :highlightedExpr="highlightedSubExpr" />
       </span>
     </span>
     <!-- unary logical connectors -->
-    <span v-else-if="form.f.tag === 'FormUnary'" :style="style" class="d-flex align-items-center justify-content-center">
+    <span v-else-if="form.f.tag === 'FormUnary'" :style="style"
+      class="d-flex align-items-center justify-content-center">
       {{ unaryConnSymbol }}
       <span class="px-1">
-        <FormattedForm :form="form.f.f1" :formValues="formValues" :widthLimit="unaryChildWidthLimit" @width="setFWidth" />
+        <FormattedForm :form="form.f.f1" :formValues="formValues" :widthLimit="unaryChildWidthLimit" @width="setFWidth"
+          @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
     </span>
     <!-- binary logical connectors -->
     <span v-else-if="form.f.tag === 'FormBinary'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !binaryConnFitsHorizontal, 'align-items-center': true }">
       <span class="px-1">
-        <FormattedForm :form="form.f.f1" :formValues="formValues" :widthLimit="binaryChildWidthLimit" @width="setF1Width" />
+        <FormattedForm :form="form.f.f1" :formValues="formValues" :widthLimit="binaryChildWidthLimit"
+          @width="setF1Width" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
       {{ binaryConnSymbol }}
       <span class="px-1">
-        <FormattedForm :form="form.f.f2" :formValues="formValues" :widthLimit="binaryChildWidthLimit" @width="setF2Width" />
+        <FormattedForm :form="form.f.f2" :formValues="formValues" :widthLimit="binaryChildWidthLimit"
+          @width="setF2Width" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
     </span>
     <!-- if-then-else formulas -->
@@ -275,15 +304,18 @@ const style = computed<StyleValue>(() => {
       :class="{ 'd-flex': true, 'flex-column': !iteFitsHorizontal, 'align-items-center': true }">
       <span>If</span>
       <span class="px-1">
-        <FormattedForm :form="form.f.fc" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFcWidth" />
+        <FormattedForm :form="form.f.fc" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFcWidth"
+          @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
       then
       <span class="px-1">
-        <FormattedForm :form="form.f.ft" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFtWidth" />
+        <FormattedForm :form="form.f.ft" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFtWidth"
+          @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
       else
       <span class="px-1">
-        <FormattedForm :form="form.f.ff" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFfWidth" />
+        <FormattedForm :form="form.f.ff" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFfWidth"
+          @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
     </span>
   </span>
