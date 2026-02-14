@@ -1,5 +1,5 @@
 import type { Kleenean } from "@/formulas/kleenean"
-import type { Var } from "../formulas/exprs"
+import type { ExprHash, Var } from "../formulas/exprs"
 import type { FormHash } from "../formulas/forms"
 
 export type BoxHash = string
@@ -70,10 +70,27 @@ export type ProgressStep = {
 }
 
 export type EvalInfo = {
-  formValues: FormValues
+  formValues: FormValues,
+  exprValues?: ExprValues
 }
 
 export type FormValues = Record<FormHash, Kleenean>
+export type ExprValues = Record<ExprHash, ExprValue>
+
+export type ExprValue = Interval | AffineForm
+
+export type AffineForm = {
+  center: number,
+  errTerms: Record<string, number>,
+}
+
+export function exprValueIsInterval(exprValue: ExprValue): exprValue is Interval {
+  return 'l' in exprValue && 'u' in exprValue;
+}
+
+export function exprValueIsAffineForm(exprValue: ExprValue): exprValue is AffineForm {
+  return 'center' in exprValue && 'errTerms' in exprValue;
+}
 
 export function isSplitStep(step: ProgressStep): boolean {
   return step.progressPaving.undecided.length > 1;
@@ -103,7 +120,7 @@ export function getStepProblem(step: Step): Problem | null {
 
 export function getSubProblems(step: Step): Problem[] {
   switch (step.tag) {
-    case "ProgressStep":      
+    case "ProgressStep":
       return [...step.progressPaving.undecided];
     default:
       return [];

@@ -1,19 +1,20 @@
 <script setup lang="ts">
-import Plotly from "plotly.js-dist-min";
+import Plotly, { type ColorScale } from "plotly.js-dist-min";
 import { computed, onMounted, ref, watch } from 'vue';
 import { type FormOrExprHash } from './forms';
-import type { Box } from '@/steps/steps';
+import { exprValueIsInterval, type Box, type ExprValue } from '@/steps/steps';
 import type { Var } from './exprs';
 import { pickXY } from '@/boxes/pickVars';
 import _ from 'lodash';
 import { getTruthColour, useStepsStore } from '@/steps/stepsStore';
-import { getHexTriangulation, type DomainAndN, type Triangulation2D } from './mesh';
+import { getCornersOnlyTriangulation, getHexTriangulation, type DomainAndN, type Triangulation2D } from './mesh';
 import { evalFPExpr, evalFPForm } from "./evalFP";
 import { kleeneanSwitch } from "./kleenean";
 
 const props = defineProps<{
   formOrExprHash: FormOrExprHash | undefined;
   box: Box | undefined;
+  exprValue?: ExprValue;
 }>();
 
 const plotDiv = ref<HTMLDivElement | null>(null);
@@ -50,7 +51,7 @@ const domainWidth = computed(() => {
   return Math.max(xWidth, yWidth);
 });
 
-const boxTriangulation = computed<Triangulation2D | undefined>(() => {
+const denseTriangulation = computed<Triangulation2D | undefined>(() => {
   if (!props.box) { return undefined; }
 
   const varDomains = props.box.box_.varDomains;
@@ -62,9 +63,18 @@ const boxTriangulation = computed<Triangulation2D | undefined>(() => {
   return getHexTriangulation(xDomainAndN, yDomainAndN);
 });
 
+const cornersOnlyTriangulation = computed<Triangulation2D | undefined>(() => {
+  if (!props.box) { return undefined; }
+
+  const varDomains = props.box.box_.varDomains;
+  if (!xVarDomain.value || !yVarDomain.value) { return undefined; }
+
+  return getCornersOnlyTriangulation(xVarDomain.value, yVarDomain.value);
+});
+
 /** eval environments for each sampled point in the triangulation */
 const evalEnvs = computed(() => {
-  const triangulation = boxTriangulation.value;
+  const triangulation = denseTriangulation.value;
   if (!triangulation) { return []; }
 
   return _.zipWith(triangulation.x, triangulation.y, (x, y) =>
@@ -81,8 +91,10 @@ const expr = computed(() => {
   return useStepsStore().getExpr(props.formOrExprHash.exprHash);
 });
 
-const plotData = computed<Partial<Plotly.Data>[]>(() => {
-  const triangulation = boxTriangulation.value;
+type Trace = Partial<Plotly.Data> & { intensity: any }; // intensity is missing in the Plotly type defs
+
+function getFPValueTrace(): Trace[] {
+  const triangulation = denseTriangulation.value;
   const f = form.value;
   const e = expr.value;
   if (!f && !e || e && f || !triangulation) { return []; }
@@ -115,7 +127,8 @@ const plotData = computed<Partial<Plotly.Data>[]>(() => {
     z = evalEnvs.value.map(env => evalFPExpr(e, env));
     colorscale = [[0, 'rgb(0,0,200)'], [1, 'rgb(0,200,200)']];
   }
-  const trace: Partial<Plotly.Data & { intensity: any }> = { // intensity is missing in the type defs
+
+  return [{
     type: "mesh3d",
     z,
     intensity: z,
@@ -123,8 +136,50 @@ const plotData = computed<Partial<Plotly.Data>[]>(() => {
     showlegend: false,
     showscale: false,
     ...triangulation,
-  };
-  return [trace];
+  }];
+}
+
+function getBoundsTraces(): Trace[] {
+  const triangulation = cornersOnlyTriangulation.value;
+  const e = expr.value;
+  const eValue = props.exprValue;
+  if (!triangulation || !e || !eValue) { return []; }
+
+  if (exprValueIsInterval(eValue)) {
+    const { l, u } = eValue;
+    const colorscale: ColorScale = [[0, 'rgb(200,100,100)'], [1, 'rgb(200,100,100)']];
+    const lBoundTrace: Trace = {
+      type: "mesh3d",
+      z: Array(triangulation.x.length).fill(l),
+      colorscale,
+      intensity: Array(triangulation.x.length).fill(l),
+      opacity: 0.5,
+      showlegend: false,
+      showscale: false,
+      ...triangulation,
+    };
+    const uBoundTrace: Trace = {
+      type: "mesh3d",
+      z: Array(triangulation.x.length).fill(u),
+      colorscale,
+      intensity: Array(triangulation.x.length).fill(u),
+      opacity: 0.5,
+      showlegend: false,
+      showscale: false,
+      ...triangulation,
+    };
+    return [lBoundTrace, uBoundTrace];
+  }
+
+  return [];
+}
+
+const plotData = computed<Trace[]>(() => {
+  const fpValueTraces = getFPValueTrace();
+
+  const boundsTraces: Trace[] = getBoundsTraces();
+
+  return [...fpValueTraces, ...boundsTraces];
 });
 
 function getAxisLayout(text: string): Partial<Plotly.LayoutAxis> {
@@ -147,8 +202,6 @@ const layout = computed<Partial<Plotly.Layout>>(() => ({
   margin: { t: 5, b: 5, l: 5, r: 5 },
 }));
 
-let handlerAttached = false;
-
 function renderPlot() {
   if (!plotDiv.value) { return; }
 
@@ -158,24 +211,10 @@ function renderPlot() {
       responsive: true,
       scrollZoom: true,
     });
-
-  // add a Plotly mouse click event handler
-  if (plotDiv.value && !handlerAttached) {
-    handlerAttached = true;
-    // plotDiv.value.on('plotly_click', (data) => {
-    //   // console.log('Plotly click event data:', data);
-    //   const point = data.points[0];
-    //   const scope = point?.data.customdata[0] as string | undefined;
-    //   const constraint = point?.data.customdata[1] as string | undefined;
-    //   if (scope && constraint) {
-    //     focusedProblem.value = { scope, constraint };
-    //   }
-    // });
-  }
 }
 
 onMounted(() => {
-  watch([plotDiv, boxTriangulation, form, expr], renderPlot, { immediate: true });
+  watch([plotDiv, denseTriangulation, form, expr], renderPlot, { immediate: true });
 });
 
 </script>

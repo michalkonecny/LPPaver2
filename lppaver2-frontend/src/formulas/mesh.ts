@@ -21,6 +21,17 @@ export type Triangulation2D = {
   k: Plotly.TypedArray;
 };
 
+export function getCornersOnlyTriangulation(xDomain: Interval, yDomain: Interval): Triangulation2D {
+  return {
+    x: [xDomain.l, xDomain.u, xDomain.l, xDomain.u],
+    y: [yDomain.l, yDomain.l, yDomain.u, yDomain.u],
+    // split the rectangle into two triangles along the diagonal from (xDomain.l, yDomain.l) to (xDomain.u, yDomain.u)
+    i: new Int32Array([0, 0]),
+    j: new Int32Array([3, 3]),
+    k: new Int32Array([2, 1]),
+  };
+}
+
 export function getHexTriangulation(xDomainAndN: DomainAndN, yDomainAndN: DomainAndN): Triangulation2D {
   const xSamples = getDomainSamples(xDomainAndN);
   const ySamples = getDomainSamples(yDomainAndN);
