@@ -13,8 +13,6 @@ export const useStepsStore = defineStore('steps', {
     boxes: {} as Record<BoxHash, Box>,
     exprs: {} as Record<ExprHash, ExprF<ExprHash>>,
     forms: {} as Record<FormHash, FormF<ExprHash, FormHash>>,
-    formTrueHash: null as FormHash | null,
-    formFalseHash: null as FormHash | null,
     steps: [] as Step[],
     numberOfSteps: 0, // keep steps separately to make it easier to define reactive dependencies
     _problem2step: {} as Record<ProblemHash, Step>,
@@ -37,16 +35,6 @@ export const useStepsStore = defineStore('steps', {
       // fetch forms from redis
       const forms = await fetchWholeHash<FormF<ExprHash, FormHash>>(sessionRef, 'forms')
       this.forms = forms
-
-      // get formTrueHash and formFalseHash from forms
-      Object.entries(forms).forEach(([formHash, form]) => {
-        if (form.tag === "FormTrue") {
-          this.formTrueHash = formHash
-        }
-        if (form.tag === "FormFalse") {
-          this.formFalseHash = formHash
-        }
-      });
 
       // fetch steps from redis
       const steps = await fetchWholeList<Step>(sessionRef, 'steps')

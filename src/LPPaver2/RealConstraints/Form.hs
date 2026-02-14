@@ -88,10 +88,7 @@ lookupFormNode :: Form -> FormHash -> FormNode
 lookupFormNode form h =
   case Map.lookup h form.nodesF of
     Just node -> node
-    Nothing
-      | h P.== formTrue.root -> FormTrue
-      | h P.== formFalse.root -> FormFalse
-      | otherwise -> error "Missing node in formula"
+    Nothing -> error "Missing node in formula"
 
 instance P.Eq Form where
   f1 == f2 = f1.root P.== f2.root
@@ -195,14 +192,15 @@ flipStrictness CompLeq = CompLe
 flipStrictness CompEq = CompNeq
 flipStrictness CompNeq = CompEq
 
-{-| Negate a form.  If the form is a comparison, flip the comparison, assuming the order is linear. -}
+-- | Negate a form.  If the form is a comparison, flip the comparison, assuming the order is linear.
 formNegComp :: Form -> Form
 formNegComp form =
   case lookupFormNode form form.root of
     FormComp {comp, e1, e2} ->
       -- e.g. not (x ≤ y) is equivalent to y < x
-      formComp (flipStrictness comp) -- flip the comparison operator strictness
-        (Expr {nodes = form.nodesE, root = e2}) -- flipper order: e1 <-> e2 
+      formComp
+        (flipStrictness comp) -- flip the comparison operator strictness
+        (Expr {nodes = form.nodesE, root = e2}) -- flipper order: e1 <-> e2
         (Expr {nodes = form.nodesE, root = e1})
     _ -> formNeg form
 

@@ -166,7 +166,16 @@ simplifyEvalForm (sapleR :: r) box formInit =
   simplify
     SimplifyFormResult
       { evaluatedForm =
-          EvaluatedForm {form = formInit,  exprValues = Map.empty, formValues = Map.empty},
+          EvaluatedForm
+            { form = formInit,
+              exprValues = Map.empty,
+              formValues = 
+                -- always include true and false, since they will not be added by the recursive simplification below
+                Map.fromList
+                  [ (formTrue.root, CertainTrue),
+                    (formFalse.root, CertainFalse)
+                  ]
+            },
         oldToNew = Map.empty
       }
   where
@@ -241,8 +250,8 @@ simplifyEvalForm (sapleR :: r) box formInit =
                   decision1 = getFormDecision simplifiedF1
                   decision2 = getFormDecision simplifiedF2
                   buildR decision (f :: Form) =
-                    let formValues = Map.insert h decision formValues12 in
-                    buildResult oldToNew12 h (EvaluatedForm {form = f, exprValues = exprValues12, formValues})
+                    let formValues = Map.insert h decision formValues12
+                     in buildResult oldToNew12 h (EvaluatedForm {form = f, exprValues = exprValues12, formValues})
                in case binaryConn of
                     ConnAnd ->
                       case (decision1, decision2) of
@@ -272,16 +281,16 @@ simplifyEvalForm (sapleR :: r) box formInit =
                   (simplifiedT, _, _, _) = flattenResult resultT
                   resultF = simplifyH resultT ffH
                   (simplifiedF, exprValuesCTF, formValuesCTF, oldToNewCTF) = flattenResult resultF
-                  buildR decision (f :: Form) = 
-                    let formValues = Map.insert h decision formValuesCTF in
-                    buildResult oldToNewCTF h (EvaluatedForm {form = f, exprValues = exprValuesCTF, formValues})
+                  buildR decision (f :: Form) =
+                    let formValues = Map.insert h decision formValuesCTF
+                     in buildResult oldToNewCTF h (EvaluatedForm {form = f, exprValues = exprValuesCTF, formValues})
                   decisionC = getFormDecision simplifiedC
                   decisionT = getFormDecision simplifiedT
                   decisionF = getFormDecision simplifiedF
                   decisionCTF = case decisionC of
-                               CertainTrue -> decisionT
-                               CertainFalse -> decisionF
-                               _ -> TrueOrFalse -- overriden to true/false in some cases below 
+                    CertainTrue -> decisionT
+                    CertainFalse -> decisionF
+                    _ -> TrueOrFalse -- overriden to true/false in some cases below
                in case (decisionC, decisionT, decisionF) of
                     (CertainTrue, _, _) -> buildR decisionT simplifiedT -- "then" branch
                     (CertainFalse, _, _) -> buildR decisionF simplifiedF -- "else" branch
