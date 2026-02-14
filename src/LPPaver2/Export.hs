@@ -43,7 +43,7 @@ instance A.ToJSON MP.MPFloat where
   toJSON f = A.Number (realToFrac f)
 
 instance A.ToJSON ErrorTermId where
-  toJSON (ErrorTermId i) = A.Number (fromIntegral i)
+  toJSON (ErrorTermId i) = A.String (T.pack $ show i)
 
 instance A.ToJSONKey ErrorTermId where
   toJSONKey = A.toJSONKeyText (T.pack . show . \(ErrorTermId i) -> i)
