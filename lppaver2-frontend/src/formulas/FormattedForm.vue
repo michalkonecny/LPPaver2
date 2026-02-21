@@ -1,10 +1,10 @@
 <script lang="ts" setup>
+import _ from 'lodash';
 import { binaryCompSymbolMap, binaryConnSymbolMap, unaryConnSymbolMap, type Form, type FormOrExprHash } from './forms';
 import { computed, ref, watch, type StyleValue } from 'vue';
-import type { FormValues } from '@/steps/steps';
-import FormattedExpr from './FormattedExpr.vue';
 import { getTruthColour } from '@/steps/stepsStore';
-import _ from 'lodash';
+import FormattedExpr from './FormattedExpr.vue';
+import type { FormValues } from './evalInfo';
 
 const props = defineProps<{
   form?: Form;

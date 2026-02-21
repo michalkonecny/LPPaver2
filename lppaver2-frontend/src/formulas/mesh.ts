@@ -1,7 +1,7 @@
-import type { Interval } from "@/steps/steps";
 import _ from "lodash";
+import type { Interval } from "./evalInfo";
 
-export type DomainAndN = { domain: Interval, n: number };
+export type DomainAndN = { domain: Interval<number>, n: number };
 
 export function getDomainSamples(params: DomainAndN): { withEndpoints: number[], midpoints: number[] } {
   const { domain, n } = params;
@@ -21,7 +21,7 @@ export type Triangulation2D = {
   k: Plotly.TypedArray;
 };
 
-export function getCornersOnlyTriangulation(xDomain: Interval, yDomain: Interval): Triangulation2D {
+export function getCornersOnlyTriangulation(xDomain: Interval<number>, yDomain: Interval<number>): Triangulation2D {
   return {
     x: [xDomain.l, xDomain.u, xDomain.l, xDomain.u],
     y: [yDomain.l, yDomain.l, yDomain.u, yDomain.u],

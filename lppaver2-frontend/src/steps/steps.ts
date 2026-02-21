@@ -1,18 +1,13 @@
-import type { Kleenean } from "@/formulas/kleenean"
-import type { ExprHash, Var } from "../formulas/exprs"
+import type { Var } from "../formulas/exprs"
 import type { FormHash } from "../formulas/forms"
+import type { EvalInfo, Interval } from "@/formulas/evalInfo"
 
 export type BoxHash = string
 
 // Box types
 
-export type Interval = {
-  l: number,
-  u: number
-}
-
 export type Box_ = {
-  varDomains: Record<Var, Interval>,
+  varDomains: Record<Var, Interval<number>>,
   splitOrder: Var[]
 }
 
@@ -67,29 +62,6 @@ export type ProgressStep = {
   problem: Problem,
   progressPaving: Paving,
   evalInfo: EvalInfo,
-}
-
-export type EvalInfo = {
-  formValues: FormValues,
-  exprValues?: ExprValues
-}
-
-export type FormValues = Record<FormHash, Kleenean>
-export type ExprValues = Record<ExprHash, ExprValue>
-
-export type ExprValue = Interval | AffineForm
-
-export type AffineForm = {
-  center: number,
-  errTerms: Record<string, number>,
-}
-
-export function exprValueIsInterval(exprValue: ExprValue): exprValue is Interval {
-  return 'l' in exprValue && 'u' in exprValue;
-}
-
-export function exprValueIsAffineForm(exprValue: ExprValue): exprValue is AffineForm {
-  return 'center' in exprValue && 'errTerms' in exprValue;
 }
 
 export function isSplitStep(step: ProgressStep): boolean {

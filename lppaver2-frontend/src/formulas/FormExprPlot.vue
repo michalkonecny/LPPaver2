@@ -2,7 +2,7 @@
 import Plotly, { type ColorScale } from "plotly.js-dist-min";
 import { computed, onMounted, ref, watch } from 'vue';
 import { type FormOrExprHash } from './forms';
-import { exprValueIsAffineForm, exprValueIsInterval, type Box, type ExprValue } from '@/steps/steps';
+import { type Box } from '@/steps/steps';
 import { getExprVarExprs, type Var } from './exprs';
 import { pickXY } from '@/boxes/pickVars';
 import _ from 'lodash';
@@ -10,6 +10,7 @@ import { getTruthColour, useStepsStore } from '@/steps/stepsStore';
 import { getCornersOnlyTriangulation, getHexTriangulation, type DomainAndN, type Triangulation2D } from './mesh';
 import { evalFPExpr, evalFPForm } from "./evalFP";
 import { kleeneanSwitch } from "./kleenean";
+import { exprValueIsAffineForm, exprValueIsInterval, intervalWidth, type ExprValue, type Interval } from "./evalInfo";
 
 const props = defineProps<{
   formOrExprHash: FormOrExprHash | undefined;
@@ -19,8 +20,11 @@ const props = defineProps<{
 
 const plotDiv = ref<HTMLDivElement | null>(null);
 
-// const topScopeVarDomains = computed(() => topScopeBox.value?.varDomains ?? {});
-const vars = computed(() => props.box?.box_.splitOrder ?? []);
+const rootBox = computed(() => {
+  const rootProblem = useStepsStore().rootProblem;
+  if (!rootProblem) { return undefined; }
+  return useStepsStore().getBox(rootProblem.scope);
+})
 
 const xVar = ref<Var>("_x");
 const yVar = ref<Var>("_y");
@@ -31,6 +35,29 @@ watch(() => props.box, () => {
   xVar.value = xyVars.xVar;
   yVar.value = xyVars.yVar;
 }, { immediate: true });
+
+const yxRootRatio = computed<number>(() => {
+  // extract root box domains for x and y vars
+  const rootBoxDomains = rootBox.value?.box_.varDomains;
+  if (!rootBoxDomains) { return 1; }
+  const xDom = rootBoxDomains[xVar.value];
+  const yDom = rootBoxDomains[yVar.value];
+  if (!xDom || !yDom) { return 1; }
+
+  return intervalWidth(yDom) / intervalWidth(xDom);
+});
+
+const yxRelativeRatio = computed<number>(() => {
+  const boxDomains = props.box?.box_.varDomains;
+  if (!boxDomains) { return 1; }
+  const xDom = boxDomains[xVar.value];
+  const yDom = boxDomains[yVar.value];
+  if (!xDom || !yDom) { return 1; }
+
+  const yxRatio = intervalWidth(yDom) / intervalWidth(xDom);
+
+  return yxRatio / yxRootRatio.value;
+});
 
 const numberOfSamplesPerVar = 99;
 
@@ -139,14 +166,14 @@ function getFPValueTrace(): Trace[] {
   }];
 }
 
-const exprValue = computed(() => {
+const exprValue = computed<ExprValue | undefined>(() => {
   if (!expr.value) return undefined;
   if (!props.exprValues) return undefined;
 
   return props.exprValues[expr.value.hash];
 });
 
-const epxrValueBounds = computed(() => {
+const epxrValueBounds = computed<Interval<number[]> | undefined>(() => {
   const eValue = exprValue.value;
   if (!eValue) return undefined;
   const triang = cornersOnlyTriangulation.value;
@@ -246,11 +273,21 @@ function getAxisLayout(text: string): Partial<Plotly.LayoutAxis> {
   };
 };
 
+const aspectRatio = computed(() => {
+  const ratio = yxRelativeRatio.value;
+  if (ratio <= 1) {
+    return { x: 1, y: ratio, z: 0.5 };
+  } else {
+    return { x: 1 / ratio, y: 1, z: 0.5 };
+  }
+});
+
 const layout = computed<Partial<Plotly.Layout>>(() => ({
   autosize: true,
   uirevision: -1,
   scene: {
-    aspectmode: "data",
+    aspectmode: "manual",
+    aspectratio: aspectRatio.value,
     xaxis: { ...getAxisLayout(xVar.value) },
     yaxis: { ...getAxisLayout(yVar.value) },
     zaxis: { ...getAxisLayout("value") },
