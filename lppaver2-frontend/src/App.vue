@@ -10,7 +10,7 @@ import { type FormOrExprHash } from './formulas/forms';
 import FormExprPlot from './formulas/FormExprPlot.vue';
 
 const stepStore = useStepsStore()
-const { focusedProblem, focusedProblemSubFormExpr } = storeToRefs(stepStore)
+const { focusedProblem, focusedProblemSubFormExpr, focusedExprValues } = storeToRefs(stepStore)
 
 stepStore.initSession('default')
 
@@ -61,7 +61,7 @@ function onSubFormExprClicked(data: FormOrExprHash) {
       :h="focEPlotLayout.h" :isDraggable="false">
       <div class="border w-100 h-100" style="overflow-y: auto;">
         <FormExprPlot v-if="focusedProblemSubFormExpr" :formOrExprHash="focusedProblemSubFormExpr"
-          :box="focusedScopeBox ?? undefined" />
+          :box="focusedScopeBox ?? undefined" :exprValues="focusedExprValues" />
       </div>
     </GridItem>
   </GridLayout>

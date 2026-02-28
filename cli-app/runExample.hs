@@ -215,7 +215,10 @@ initControl = liftIO $ do
 stringToBSS :: String -> BSS.ByteString
 stringToBSS = TE.encodeUtf8 . T.pack
 
-instance (MonadIO m, MonadState LPPControlState m) => BP.CanControlSteps m (LPPStep r) where
+instance
+  (MonadIO m, MonadState LPPControlState m, A.ToJSON r) =>
+  BP.CanControlSteps m (LPPStep r)
+  where
   reportStep step = do
     let boxes = getStepBoxes step
     let exprs = getStepExprs step
@@ -267,7 +270,7 @@ instance (Monad m, MonadUnliftIOWithState m) => MonadUnliftIOWithState (LoggingT
   absorbState s = lift $ absorbState s
 
 mainWithArgs ::
-  (CanEval r, HasKleeneanComparison r) =>
+  (CanEval r, HasKleeneanComparison r, A.ToJSON r) =>
   r ->
   (LPPProblem, Rational, Int, Bool) ->
   IO ()

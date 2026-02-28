@@ -1,10 +1,5 @@
 export type Var = string
 
-export type Expr = { 
-  e: ExprF<Expr>,
-  hash: ExprHash
-}
-
 export type ExprF<E> = ExprVar | ExprLit | ExprUnary<E> | ExprBinary<E>
 
 export type ExprVar = {
@@ -55,6 +50,11 @@ export const binaryOpSymbolMap: Record<BinaryOp, string> = {
 export type ExprHash = string
 export type ExprDict = Record<ExprHash, ExprF<ExprHash>>
 
+export type Expr = {
+  e: ExprF<Expr>,
+  hash: ExprHash
+}
+
 export function exprHashToExpr(exprHash: ExprHash, dict: ExprDict): Expr {
   const exprF = dict[exprHash];
   if (!exprF) {
@@ -87,5 +87,18 @@ export function exprHashToExpr(exprHash: ExprHash, dict: ExprDict): Expr {
       };
     default:
       throw new Error(`Unknown expression tag: ${(exprF as any).tag}`);
+  }
+}
+
+export function getExprVarExprs(expr: Expr): Record<Var, Expr> {
+  switch (expr.e.tag) {
+    case 'ExprVar':
+      return { [expr.e.var]: expr };
+    case 'ExprLit':
+      return {};
+    case 'ExprUnary':
+      return getExprVarExprs(expr.e.e1);
+    case 'ExprBinary':
+      return { ...getExprVarExprs(expr.e.e1), ...getExprVarExprs(expr.e.e2) };
   }
 }

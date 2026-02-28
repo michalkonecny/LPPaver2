@@ -6,6 +6,7 @@ import {
 import { type ExprHash, type Expr, type ExprF, exprHashToExpr } from '../formulas/exprs'
 import { formHashToForm, type Form, type FormF, type FormHash, type FormOrExprHash } from '../formulas/forms'
 import type { Kleenean } from '@/formulas/kleenean'
+import type { ExprValue } from '@/formulas/evalInfo'
 
 export const useStepsStore = defineStore('steps', {
   state: () => ({
@@ -18,7 +19,7 @@ export const useStepsStore = defineStore('steps', {
     _problem2step: {} as Record<ProblemHash, Step>,
     rootProblem: null as Problem | null,
     focusedProblem: null as Problem | null,
-    focusedProblemSubFormExpr: null as FormOrExprHash | null,
+    focusedProblemSubFormExpr: null as FormOrExprHash | null, // set in App.vue when user clicks on a sub-form or sub-expr
     zoomedProblem: null as Problem | null,
   }),
   actions: {
@@ -104,6 +105,12 @@ export const useStepsStore = defineStore('steps', {
     }
   },
   getters: {
+    focusedExprValues(state): Record<ExprHash, ExprValue> | undefined {
+      if (!state.focusedProblem) return undefined;
+      const step = state._problem2step[problemToProblemHash(state.focusedProblem)];
+      if (!step || step.tag !== "ProgressStep") return undefined;
+      return step.evalInfo.exprValues;
+    }
   },
 })
 

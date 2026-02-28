@@ -1,18 +1,13 @@
-import type { Kleenean } from "@/formulas/kleenean"
 import type { Var } from "../formulas/exprs"
 import type { FormHash } from "../formulas/forms"
+import type { EvalInfo, Interval } from "@/formulas/evalInfo"
 
 export type BoxHash = string
 
 // Box types
 
-export type Interval = {
-  l: number,
-  u: number
-}
-
 export type Box_ = {
-  varDomains: Record<Var, Interval>,
+  varDomains: Record<Var, Interval<number>>,
   splitOrder: Var[]
 }
 
@@ -69,12 +64,6 @@ export type ProgressStep = {
   evalInfo: EvalInfo,
 }
 
-export type EvalInfo = {
-  formValues: FormValues
-}
-
-export type FormValues = Record<FormHash, Kleenean>
-
 export function isSplitStep(step: ProgressStep): boolean {
   return step.progressPaving.undecided.length > 1;
 }
@@ -103,7 +92,7 @@ export function getStepProblem(step: Step): Problem | null {
 
 export function getSubProblems(step: Step): Problem[] {
   switch (step.tag) {
-    case "ProgressStep":      
+    case "ProgressStep":
       return [...step.progressPaving.undecided];
     default:
       return [];
