@@ -198,7 +198,7 @@ const customdata = computed(() =>
 const hovertemplate = computed(() =>
   `${xVar.value} = %{x:.3f}<br>${yVar.value} = %{y:.3f}`
   + (customdata.value 
-    ? '<br>val ~ %{customdata[0]:.3f}<br>val ∈ [%{customdata[1]:.3f}, %{customdata[2]:.3f}]'
+    ? '<br>val ⩬ %{customdata[0]:.3f}<br>val ∈ [%{customdata[1]:.3f}, %{customdata[2]:.3f}]'
     : ''));
 
 function getFPValueTrace(): Trace[] {
@@ -269,6 +269,7 @@ function getBoundsTraces(): Trace[] {
       ...triangulation,
       customdata: customdata.value, // [fpValue, lowerBound, upperBound] for each point, if available
       hovertemplate: hovertemplate.value,
+      hoverinfo: 'none', // do not show the trace name beside the template
     };
   };
   const lBoundTrace: Trace = mkBoundTrace(l);
