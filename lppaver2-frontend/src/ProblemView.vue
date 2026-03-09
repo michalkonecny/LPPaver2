@@ -45,7 +45,7 @@ const viewWidth = computed(() => window.innerWidth);
     <BoxVarsShow v-if="box" :box="box" class="mb-2" />
     <span class="d-flex justify-content-center mt-1">
       <!-- TODO: adjust width dynamically with grid cell size changes -->
-      <FormattedForm :form="form" :formValues="formValues" :widthLimit="Math.round(viewWidth / 20)"
+      <FormattedForm :form="form" :formValues="formValues" :inInfo="{ widthLimit: Math.round(viewWidth / 20), couldBeFormType: 'IE' }"
         :highlightedSubFormExpr="highlightedSubFormExpr" @click="(d) => emits('click', d)" />
     </span>
   </div>
