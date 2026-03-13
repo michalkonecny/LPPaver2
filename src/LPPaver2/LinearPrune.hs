@@ -9,6 +9,22 @@ import LPPaver2.RealConstraints.Form
 import MixedTypesNumPrelude
 import Prelude qualified as P
 
+{-|
+
+@
+      +------------------------+
+      |         other          |
+      | +-------------+        |     
+      | |  DIE        |        |  
+      | |      +------+------+ |
+      | |      |  IE  |      | |
+      | +------+------+      | |
+      |        |        CIE  | |
+      |        +-------------+ |
+      +------------------------+
+@
+
+-}
 data IEFormType
   = IE -- single inequality
   | CIE -- conjunction of inequalities

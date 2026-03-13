@@ -27,7 +27,7 @@ const props = defineProps<{
   +------------------------+
 ```
 */
-type FormType =
+type IEFormType =
   "IE" | // inequality
   "CIE" | // conjunction of inequalities (including ==)
   "DIE" | // disjunction of inequalities (including !=)
@@ -35,17 +35,17 @@ type FormType =
 
 type InInfo = { 
   widthLimit: number;
-  couldBeFormType: FormType;
+  couldBeFormType: IEFormType;
 }
 
 type OutInfo = {
   width: number;
-  formType: FormType;
+  formType: IEFormType;
 }
 
 const outInfo = ref<OutInfo>();
 
-const formType = computed<FormType>(() => {
+const formType = computed<IEFormType>(() => {
   if(!outInfo.value) return 'Other';
   
   const couldBeFormType = props.inInfo.couldBeFormType;
@@ -246,7 +246,7 @@ watch(binaryConnTotalWidthIfHorizontal, w => {
       const f1IsDIE = _.includes(['DIE', 'IE'], f1OutInfo.value.formType);
       const f2IsDIE = _.includes(['DIE', 'IE'], f2OutInfo.value.formType);
 
-      const formType: FormType =
+      const formType: IEFormType =
         props.form.f.bconn == "ConnAnd" && f1IsCIE && f2IsCIE ? 'CIE' // conjunction of inequalities
           : props.form.f.bconn == "ConnOr" && f1IsDIE && f2IsDIE ? 'DIE' // disjunction of inequalities
             : 'Other';
