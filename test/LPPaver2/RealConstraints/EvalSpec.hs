@@ -1,7 +1,8 @@
 module LPPaver2.RealConstraints.EvalSpec (spec) where
 
 import AERN2.Kleenean
-import AERN2.MP
+import AERN2.MP (MPBall, mpBall)
+import AERN2.MP qualified as MP (endpointsAsIntervals)
 import Data.Map qualified as Map
 import GHC.Records (HasField (getField))
 import LPPaver2.RealConstraints.Boxes
@@ -20,6 +21,15 @@ simplifyOverUnitX = simplifyEvalFormMB (mkBox [("x", (0.0, 1.0))])
 
 x :: Expr
 x = exprVar "x"
+
+lit1 :: Expr
+lit1 = exprLit 1.0
+
+lit2 :: Expr
+lit2 = exprLit 2.0
+
+litHalf :: Expr
+litHalf = exprLit 0.5
 
 spec :: Spec
 spec = describe "simplifyEvalForm" $ do
@@ -42,35 +52,35 @@ spec = describe "simplifyEvalForm" $ do
     (formValues Map.! formFalse.root) `shouldBe` CertainFalse
 
   it "simplifies simple comparisons correctly (1 <= 2)" $ do
-    let form = exprLit 1.0 <= exprLit 2.0
+    let form = lit1 <= lit2
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
     -- simplified to True
     resultForm `shouldBe` formTrue
 
   it "simplifies simple comparisons correctly (2 <= 1)" $ do
-    let form = exprLit 2.0 <= exprLit 1.0
+    let form = lit2 <= lit1
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
     -- simplified to False
     resultForm `shouldBe` formFalse
 
   it "simplifies expressions with variables correctly (x <= 2 over [0,1])" $ do
-    let form = x <= exprLit 2.0
+    let form = x <= lit2
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
     -- simplified to True
     resultForm `shouldBe` formTrue
 
   it "simplifies expressions with variables correctly (x >= 2 over [0,1])" $ do
-    let form = exprLit 2.0 <= x
+    let form = lit2 <= x
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
     -- simplified to False
     resultForm `shouldBe` formFalse
 
   it "leaves uncertain forms unresolved (x <= 0.5 over [0,1])" $ do
-    let form = x <= exprLit 0.5
+    let form = x <= litHalf
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
     -- unchanged, since it's not decided
@@ -91,30 +101,30 @@ spec = describe "simplifyEvalForm" $ do
     resultForm `shouldBe` formTrue
 
   it "simplifies Boolean connectives (True or (x <= 0.5))" $ do
-    let form = formTrue || x <= exprLit 0.5
+    let form = formTrue || x <= litHalf
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
     -- simplified to True
     resultForm `shouldBe` formTrue
 
   it "simplifies if-then-else when condition is True" $ do
-    let formThenBranch = x <= exprLit 0.5
-        form = formIfThenElse (x <= exprLit 2.0) formThenBranch formFalse
+    let formThenBranch = x <= litHalf
+        form = formIfThenElse (x <= lit2) formThenBranch formFalse
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
     -- simplified to the "then" branch
     resultForm `shouldBe` formThenBranch
 
   it "simplifies if-then-else when condition is False" $ do
-    let formElseBranch = x <= exprLit 0.5
-        form = formIfThenElse (x > exprLit 2.0) formFalse formElseBranch
+    let formElseBranch = x <= litHalf
+        form = formIfThenElse (x > lit2) formFalse formElseBranch
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
     -- simplified to the "else" branch
     resultForm `shouldBe` formElseBranch
 
   it "simplifies if-then-else when branches are decided (if C then True else False)" $ do
-    let formC = x <= exprLit 0.5
+    let formC = x <= litHalf
         form = formIfThenElse formC formTrue formFalse
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
@@ -122,12 +132,21 @@ spec = describe "simplifyEvalForm" $ do
     resultForm `shouldBe` formC
 
   it "simplifies if-then-else when branches are decided (if C then False else True)" $ do
-    let formC = x <= exprLit 0.5
+    let formC = x <= litHalf
         form = formIfThenElse formC formFalse formTrue
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
     -- reduced to the undecided condition only since the branches are True and False
     resultForm `shouldBe` not formC
+
+  it "returns values for sub-expressions (x - 1 <= 2 over [0,1])" $ do
+    let form = x - lit1 <= lit2
+        result = simplifyOverUnitX form
+        exprValues = result.evaluatedForm.exprValues
+    MP.endpointsAsIntervals (exprValues Map.! lit1.root) `shouldBe` (mpBall 1, mpBall 1)
+    MP.endpointsAsIntervals (exprValues Map.! lit2.root) `shouldBe` (mpBall 2, mpBall 2)
+    MP.endpointsAsIntervals (exprValues Map.! x.root) `shouldBe` (mpBall 0, mpBall 1)
+    MP.endpointsAsIntervals (exprValues Map.! (x - lit1).root) `shouldBe` (mpBall (-1), mpBall 0)
 
   it "returns values for sub-formulas (True and False)" $ do
     let form = formTrue && formFalse
