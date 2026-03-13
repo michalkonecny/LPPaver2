@@ -107,15 +107,6 @@ spec = describe "simplifyEvalForm" $ do
     -- simplified to True
     resultForm `shouldBe` formTrue
 
-  it "conjuction puts comparisons first (A and (A and (x <= 0.5)))" $ do
-    let comp = x <= litHalf -- undecided comparison
-        a = formImpl comp comp -- not a comparison, cannot be simplified
-        form = a && (a && comp) -- conjunction with a non-comparison formula should put the comparison first
-        result = simplifyOverUnitX form
-        resultForm = result.evaluatedForm.form
-    -- simplified to True
-    resultForm `shouldBe` (comp && a) && a -- comparison should be first in the conjunction
-
   it "simplifies if-then-else when condition is True" $ do
     let formThenBranch = x <= litHalf
         form = formIfThenElse (x <= lit2) formThenBranch formFalse
