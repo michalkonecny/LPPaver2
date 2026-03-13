@@ -169,7 +169,7 @@ simplifyEvalForm (sapleR :: r) box formInit =
           EvaluatedForm
             { form = formInit,
               exprValues = Map.empty,
-              formValues = 
+              formValues =
                 -- always include true and false, since they will not be added by the recursive simplification below
                 Map.fromList
                   [ (formTrue.root, CertainTrue),
@@ -193,7 +193,7 @@ simplifyEvalForm (sapleR :: r) box formInit =
     simplify result0 =
       simplifyNodeReusingPrev form0.root
       where
-        (form0, exprValues0, formValues0, oldToNew0) = flattenResult result0
+        (form0, _, _, oldToNew0) = flattenResult result0
 
         simplifyNodeReusingPrev h =
           case getFormDecision form0 of
@@ -212,94 +212,136 @@ simplifyEvalForm (sapleR :: r) box formInit =
           -- branch by the type of node
           case lookupFormNode form0 h of
             FormComp binComp e1H e2H ->
-              -- get the expression values and do the comparison
-              let exprValues1 = evalEH e1H exprValues0
-                  e1Value = exprValues1 Map.! e1H
-                  exprValues12 = evalEH e2H exprValues1
-                  e2Value = exprValues12 Map.! e2H
-                  comparison = case binComp of
-                    CompLe -> e1Value < e2Value
-                    CompLeq -> e1Value <= e2Value
-                    CompEq -> e1Value == e2Value
-                    CompNeq -> e1Value /= e2Value
-                  formValues = Map.insert h comparison formValues0
-                  buildR (f :: Form) =
-                    buildResult oldToNew0 h (EvaluatedForm {form = f, exprValues = exprValues12, formValues})
-               in case comparison of
-                    -- if decided, replace by constant True/False, keeping track of evaluated expressions
-                    CertainTrue -> buildR formTrue
-                    CertainFalse -> buildR formFalse
-                    -- if undecided, keep formula unchanged, keeping track of evaluated expressions
-                    _ -> buildR (form0 {Form.root = h})
-            FormUnary ConnNeg f1H ->
-              let result1 = simplifyH result0 f1H
-                  (simplifiedF1, exprValues1, formValues1, oldToNew1) = flattenResult result1
-                  formValues = Map.insert h (negate (formValues1 Map.! f1H)) formValues1
-                  buildR (f :: Form) =
-                    buildResult oldToNew1 h (EvaluatedForm {form = f, exprValues = exprValues1, formValues})
-                  decision1 = getFormDecision simplifiedF1
-               in case decision1 of
-                    CertainTrue -> buildR formFalse -- negating literal "true"
-                    CertainFalse -> buildR formTrue -- negating literal "false"
-                    _ -> buildR (not simplifiedF1) -- if undecided, try to flip comparisons (e.g. "not (x <= y)" can be simplified to "x > y")
-            FormBinary binaryConn f1H f2H ->
-              let result1 = simplifyH result0 f1H
-                  (simplifiedF1, _, _, _) = flattenResult result1
-                  result2 = simplifyH result1 f2H
-                  (simplifiedF2, exprValues12, formValues12, oldToNew12) = flattenResult result2
-                  decision1 = getFormDecision simplifiedF1
-                  decision2 = getFormDecision simplifiedF2
-                  buildR decision (f :: Form) =
-                    let formValues = Map.insert h decision formValues12
-                     in buildResult oldToNew12 h (EvaluatedForm {form = f, exprValues = exprValues12, formValues})
-               in case binaryConn of
-                    ConnAnd ->
-                      case (decision1, decision2) of
-                        (CertainFalse, _) -> buildR CertainFalse formFalse
-                        (_, CertainFalse) -> buildR CertainFalse formFalse
-                        (CertainTrue, _) -> buildR decision2 simplifiedF2
-                        (_, CertainTrue) -> buildR decision1 simplifiedF1
-                        _ -> buildR (decision1 && decision2) $ simplifiedF1 && simplifiedF2
-                    ConnOr ->
-                      case (decision1, decision2) of
-                        (CertainTrue, _) -> buildR CertainTrue formTrue
-                        (_, CertainTrue) -> buildR CertainTrue formTrue
-                        (CertainFalse, _) -> buildR decision2 simplifiedF2
-                        (_, CertainFalse) -> buildR decision1 simplifiedF1
-                        _ -> buildR (decision1 || decision2) $ simplifiedF1 || simplifiedF2
-                    ConnImpl ->
-                      case (decision1, decision2) of
-                        (CertainFalse, _) -> buildR CertainTrue formTrue
-                        (_, CertainTrue) -> buildR CertainTrue formTrue
-                        (CertainTrue, _) -> buildR decision2 simplifiedF2
-                        (_, CertainFalse) -> buildR (not decision1) $ not simplifiedF1
-                        _ -> buildR (not decision1 || decision2) $ formImpl simplifiedF1 simplifiedF2
+              simplifyComp evalEH result0 h binComp e1H e2H
+            FormUnary op f1H ->
+              simplifyUnary simplifyH result0 h op f1H
+            FormBinary op f1H f2H ->
+              simplifyBinary simplifyH result0 h op f1H f2H
             FormIfThenElse fcH ftH ffH ->
-              let resultC = simplifyH result0 fcH
-                  (simplifiedC, _, _, _) = flattenResult resultC
-                  resultT = simplifyH resultC ftH
-                  (simplifiedT, _, _, _) = flattenResult resultT
-                  resultF = simplifyH resultT ffH
-                  (simplifiedF, exprValuesCTF, formValuesCTF, oldToNewCTF) = flattenResult resultF
-                  buildR decision (f :: Form) =
-                    let formValues = Map.insert h decision formValuesCTF
-                     in buildResult oldToNewCTF h (EvaluatedForm {form = f, exprValues = exprValuesCTF, formValues})
-                  decisionC = getFormDecision simplifiedC
-                  decisionT = getFormDecision simplifiedT
-                  decisionF = getFormDecision simplifiedF
-                  decisionCTF = case decisionC of
-                    CertainTrue -> decisionT
-                    CertainFalse -> decisionF
-                    _ -> TrueOrFalse -- overriden to true/false in some cases below
-               in case (decisionC, decisionT, decisionF) of
-                    (CertainTrue, _, _) -> buildR decisionT simplifiedT -- "then" branch
-                    (CertainFalse, _, _) -> buildR decisionF simplifiedF -- "else" branch
-                    (_, CertainTrue, CertainTrue) -> buildR CertainTrue formTrue -- undecided but both branches "true"
-                    (_, CertainFalse, CertainFalse) -> buildR CertainFalse formFalse -- undecided but both branches "false"
-                    (_, CertainTrue, _) -> buildR decisionCTF $ simplifiedC || simplifiedF -- "then" branch is "true", so we can simplify to "C or F"
-                    (_, CertainFalse, _) -> buildR decisionCTF $ not simplifiedC && simplifiedF -- "then" branch is "false", so we can simplify to "not C and F"
-                    (_, _, CertainTrue) -> buildR decisionCTF $ not simplifiedC || simplifiedT -- "else" branch is "true", so we can simplify to "not C or T"
-                    (_, _, CertainFalse) -> buildR decisionCTF $ simplifiedC && simplifiedT -- "else" branch is "false", so we can simplify to "C and T"
-                    _ -> buildR decisionCTF $ formIfThenElse simplifiedC simplifiedT simplifiedF -- no part decided, keep if-then-else
+              simplifyIf simplifyH result0 h fcH ftH ffH
             FormTrue -> error "Internal error: FormTrue case should be caught earlier"
             FormFalse -> error "Internal error: FormFalse case should be caught earlier"
+
+simplifyComp ::
+  (HasKleeneanComparison r) =>
+  (ExprHash -> Map.Map ExprHash r -> Map.Map ExprHash r) ->
+  SimplifyFormResult r ->
+  FormHash ->
+  BinaryComp ->
+  ExprHash ->
+  ExprHash ->
+  SimplifyFormResult r
+simplifyComp evalEH result0 h binComp e1H e2H =
+  let (form0, exprValues0, formValues0, oldToNew0) = flattenResult result0
+      exprValues1 = evalEH e1H exprValues0
+      e1Value = exprValues1 Map.! e1H
+      exprValues12 = evalEH e2H exprValues1
+      e2Value = exprValues12 Map.! e2H
+      comparison = case binComp of
+        CompLe -> e1Value < e2Value
+        CompLeq -> e1Value <= e2Value
+        CompEq -> e1Value == e2Value
+        CompNeq -> e1Value /= e2Value
+      formValues = Map.insert h comparison formValues0
+      buildR f =
+        buildResult oldToNew0 h (EvaluatedForm {form = f, exprValues = exprValues12, formValues})
+   in case comparison of
+        CertainTrue -> buildR formTrue
+        CertainFalse -> buildR formFalse
+        _ -> buildR (form0 {Form.root = h})
+
+simplifyUnary ::
+  (SimplifyFormResult r -> FormHash -> SimplifyFormResult r) ->
+  SimplifyFormResult r ->
+  FormHash ->
+  UnaryConn ->
+  FormHash ->
+  SimplifyFormResult r
+simplifyUnary simplifyH result0 h ConnNeg f1H =
+  let result1 = simplifyH result0 f1H
+      (simplifiedF1, exprValues1, formValues1, oldToNew1) = flattenResult result1
+      formValues = Map.insert h (negate (formValues1 Map.! f1H)) formValues1
+      buildR f =
+        buildResult oldToNew1 h (EvaluatedForm {form = f, exprValues = exprValues1, formValues})
+      decision1 = getFormDecision simplifiedF1
+   in case decision1 of
+        CertainTrue -> buildR formFalse
+        CertainFalse -> buildR formTrue
+        _ -> buildR (not simplifiedF1)
+
+simplifyBinary ::
+  (SimplifyFormResult r -> FormHash -> SimplifyFormResult r) ->
+  SimplifyFormResult r ->
+  FormHash ->
+  BinaryConn ->
+  FormHash ->
+  FormHash ->
+  SimplifyFormResult r
+simplifyBinary simplifyH result0 h binaryConn f1H f2H =
+  let result1 = simplifyH result0 f1H
+      (simplifiedF1, _, _, _) = flattenResult result1
+      result2 = simplifyH result1 f2H
+      (simplifiedF2, exprValues12, formValues12, oldToNew12) = flattenResult result2
+      decision1 = getFormDecision simplifiedF1
+      decision2 = getFormDecision simplifiedF2
+      buildR decision f =
+        let formValues = Map.insert h decision formValues12
+         in buildResult oldToNew12 h (EvaluatedForm {form = f, exprValues = exprValues12, formValues})
+   in case binaryConn of
+        ConnAnd ->
+          case (decision1, decision2) of
+            (CertainFalse, _) -> buildR CertainFalse formFalse
+            (_, CertainFalse) -> buildR CertainFalse formFalse
+            (CertainTrue, _) -> buildR decision2 simplifiedF2
+            (_, CertainTrue) -> buildR decision1 simplifiedF1
+            _ -> buildR (decision1 && decision2) $ simplifiedF1 && simplifiedF2
+        ConnOr ->
+          case (decision1, decision2) of
+            (CertainTrue, _) -> buildR CertainTrue formTrue
+            (_, CertainTrue) -> buildR CertainTrue formTrue
+            (CertainFalse, _) -> buildR decision2 simplifiedF2
+            (_, CertainFalse) -> buildR decision1 simplifiedF1
+            _ -> buildR (decision1 || decision2) $ simplifiedF1 || simplifiedF2
+        ConnImpl ->
+          case (decision1, decision2) of
+            (CertainFalse, _) -> buildR CertainTrue formTrue
+            (_, CertainTrue) -> buildR CertainTrue formTrue
+            (CertainTrue, _) -> buildR decision2 simplifiedF2
+            (_, CertainFalse) -> buildR (not decision1) $ not simplifiedF1
+            _ -> buildR (not decision1 || decision2) $ formImpl simplifiedF1 simplifiedF2
+
+simplifyIf ::
+  (SimplifyFormResult r -> FormHash -> SimplifyFormResult r) ->
+  SimplifyFormResult r ->
+  FormHash ->
+  FormHash ->
+  FormHash ->
+  FormHash ->
+  SimplifyFormResult r
+simplifyIf simplifyH result0 h fcH ftH ffH =
+  let resultC = simplifyH result0 fcH
+      (simplifiedC, _, _, _) = flattenResult resultC
+      resultT = simplifyH resultC ftH
+      (simplifiedT, _, _, _) = flattenResult resultT
+      resultF = simplifyH resultT ffH
+      (simplifiedF, exprValuesCTF, formValuesCTF, oldToNewCTF) = flattenResult resultF
+      buildR decision f =
+        let formValues = Map.insert h decision formValuesCTF
+         in buildResult oldToNewCTF h (EvaluatedForm {form = f, exprValues = exprValuesCTF, formValues})
+      decisionC = getFormDecision simplifiedC
+      decisionT = getFormDecision simplifiedT
+      decisionF = getFormDecision simplifiedF
+      decisionCTF = case decisionC of
+        CertainTrue -> decisionT
+        CertainFalse -> decisionF
+        _ -> TrueOrFalse
+   in case (decisionC, decisionT, decisionF) of
+        (CertainTrue, _, _) -> buildR decisionT simplifiedT
+        (CertainFalse, _, _) -> buildR decisionF simplifiedF
+        (_, CertainTrue, CertainTrue) -> buildR CertainTrue formTrue
+        (_, CertainFalse, CertainFalse) -> buildR CertainFalse formFalse
+        (_, CertainTrue, _) -> buildR decisionCTF $ simplifiedC || simplifiedF
+        (_, CertainFalse, _) -> buildR decisionCTF $ not simplifiedC && simplifiedF
+        (_, _, CertainTrue) -> buildR decisionCTF $ not simplifiedC || simplifiedT
+        (_, _, CertainFalse) -> buildR decisionCTF $ simplifiedC && simplifiedT
+        _ -> buildR decisionCTF $ formIfThenElse simplifiedC simplifiedT simplifiedF
