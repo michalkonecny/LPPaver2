@@ -330,10 +330,14 @@ const isHighlighted = computed(() =>
 const highlightedSubExpr = computed(() =>
   props.highlightedSubFormExpr?.type === 'expr' ? props.highlightedSubFormExpr.exprHash : undefined);
 
+const isTopLevelComparison = computed(() => props.form?.f.tag === 'FormComp' && formType.value !== 'Other');
+
 const style = computed<StyleValue>(() => {
   return {
     'backgroundColor': colour.value,
-    'border': isHighlighted.value ? '1.5px solid blue' : '0.5px solid grey',
+    'border': isTopLevelComparison.value 
+      ? isHighlighted.value ? '2.5px dashed blue' : '2.5px dashed black'
+      : isHighlighted.value ? '1.5px solid blue' : '0.5px solid grey',
   };
 });
 
