@@ -2,6 +2,7 @@ module LPPaver2.RealConstraints.EvalSpec (spec) where
 
 import AERN2.Kleenean
 import AERN2.MP
+import Data.Map qualified as Map
 import GHC.Records (HasField (getField))
 import LPPaver2.RealConstraints.Boxes
 import LPPaver2.RealConstraints.Eval
@@ -11,93 +12,125 @@ import LPPaver2.RealConstraints.Form
 import MixedTypesNumPrelude
 import Test.Hspec
 
+simplifyEvalFormMB :: Box -> Form -> SimplifyFormResult MPBall
+simplifyEvalFormMB = simplifyEvalForm (mpBall (0 :: Integer))
+
+simplifyOverUnitX :: Form -> SimplifyFormResult MPBall
+simplifyOverUnitX = simplifyEvalFormMB (mkBox [("x", (0.0, 1.0))])
+
+x :: Expr
+x = exprVar "x"
+
 spec :: Spec
 spec = describe "simplifyEvalForm" $ do
   it "evaluates trivial constants correctly (True)" $ do
-    let box = mkBox []
-        sampleR = mpBall (0 :: Integer)
-        result = simplifyEvalForm sampleR box formTrue
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainTrue
+    let result = simplifyOverUnitX formTrue
+        resultForm = result.evaluatedForm.form
+        formValues = result.evaluatedForm.formValues
+    resultForm `shouldBe` formTrue -- unchanged
+    (result.oldToNew Map.! formTrue.root) `shouldBe` formTrue.root -- identity mapping
+    -- evaluated as true
+    (formValues Map.! formTrue.root) `shouldBe` CertainTrue
 
   it "evaluates trivial constants correctly (False)" $ do
-    let box = mkBox []
-        sampleR = mpBall (0 :: Integer)
-        result = simplifyEvalForm sampleR box formFalse
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainFalse
+    let result = simplifyOverUnitX formFalse
+        resultForm = result.evaluatedForm.form
+        formValues = result.evaluatedForm.formValues
+    resultForm `shouldBe` formFalse -- unchanged
+    (result.oldToNew Map.! formFalse.root) `shouldBe` formFalse.root -- identity mapping
+    -- evaluated as false
+    (formValues Map.! formFalse.root) `shouldBe` CertainFalse
 
-  it "evaluates simple comparisons correctly (1 <= 2)" $ do
-    let box = mkBox []
-        sampleR = mpBall (0 :: Integer)
-        form = exprLit (rational 1) <= exprLit (rational 2)
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainTrue
+  it "simplifies simple comparisons correctly (1 <= 2)" $ do
+    let form = exprLit 1.0 <= exprLit 2.0
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- simplified to True
+    resultForm `shouldBe` formTrue
 
-  it "evaluates simple comparisons correctly (2 <= 1)" $ do
-    let box = mkBox []
-        sampleR = mpBall (0 :: Integer)
-        form = exprLit (rational 2) <= exprLit (rational 1)
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainFalse
+  it "simplifies simple comparisons correctly (2 <= 1)" $ do
+    let form = exprLit 2.0 <= exprLit 1.0
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- simplified to False
+    resultForm `shouldBe` formFalse
 
-  it "evaluates expressions with variables correctly (x <= 2 over [0,1])" $ do
-    let box = mkBox [("x", (rational 0, rational 1))]
-        sampleR = mpBall (0 :: Integer)
-        form = exprVar "x" <= exprLit (rational 2)
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainTrue
+  it "simplifies expressions with variables correctly (x <= 2 over [0,1])" $ do
+    let form = x <= exprLit 2.0
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- simplified to True
+    resultForm `shouldBe` formTrue
 
-  it "evaluates expressions with variables correctly (x >= 2 over [0,1])" $ do
-    let box = mkBox [("x", (rational 0, rational 1))]
-        sampleR = mpBall (0 :: Integer)
-        form = exprLit (rational 2) <= exprVar "x"
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainFalse
+  it "simplifies expressions with variables correctly (x >= 2 over [0,1])" $ do
+    let form = exprLit 2.0 <= x
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- simplified to False
+    resultForm `shouldBe` formFalse
 
   it "leaves uncertain forms unresolved (x <= 0.5 over [0,1])" $ do
-    let box = mkBox [("x", (rational 0, rational 1))]
-        sampleR = mpBall (0 :: Integer)
-        form = exprVar "x" <= exprLit (rational (1 / 2))
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` TrueOrFalse
+    let form = x <= exprLit 0.5
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- unchanged, since it's not decided
+    resultForm `shouldBe` form
 
-  it "evaluates boolean connectives (True and False)" $ do
-    let box = mkBox []
-        sampleR = mpBall (0 :: Integer)
-        form = formTrue && formFalse
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainFalse
+  it "simplifies Boolean connectives (True and False)" $ do
+    let form = formTrue && formFalse
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- simplified to False
+    resultForm `shouldBe` formFalse
 
-  it "evaluates boolean connectives (not False)" $ do
-    let box = mkBox []
-        sampleR = mpBall (0 :: Integer)
-        form = not formFalse
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainTrue
+  it "simplifies Boolean connectives (not False)" $ do
+    let form = not formFalse
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- simplified to True
+    resultForm `shouldBe` formTrue
 
-  it "evaluates boolean connectives (True or (x <= 0.5))" $ do
-    let box = mkBox [("x", (rational 0, rational 1))]
-        sampleR = mpBall (0 :: Integer)
-        form = formTrue || exprVar "x" <= exprLit (rational (1 / 2))
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainTrue
+  it "simplifies Boolean connectives (True or (x <= 0.5))" $ do
+    let form = formTrue || x <= exprLit 0.5
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- simplified to True
+    resultForm `shouldBe` formTrue
 
-  it "evaluates if-then-else when condition is True" $ do
-    let box = mkBox [("x", (rational 0, rational 1))]
-        sampleR = mpBall (0 :: Integer)
-        form = formIfThenElse formTrue (exprVar "x" <= exprLit (rational 2)) formFalse
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainTrue
+  it "simplifies if-then-else when condition is True" $ do
+    let formThenBranch = x <= exprLit 0.5
+        form = formIfThenElse (x <= exprLit 2.0) formThenBranch formFalse
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- simplified to the "then" branch
+    resultForm `shouldBe` formThenBranch
 
-  it "evaluates if-then-else when condition is False" $ do
-    let box = mkBox [("x", (rational 0, rational 1))]
-        sampleR = mpBall (0 :: Integer)
-        form = formIfThenElse formFalse formFalse (exprVar "x" <= exprLit (rational 2))
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` CertainTrue
+  it "simplifies if-then-else when condition is False" $ do
+    let formElseBranch = x <= exprLit 0.5
+        form = formIfThenElse (x > exprLit 2.0) formFalse formElseBranch
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- simplified to the "else" branch
+    resultForm `shouldBe` formElseBranch
 
   it "leaves if-then-else uncertain when condition is uncertain" $ do
-    let box = mkBox [("x", (rational 0, rational 1))]
-        sampleR = mpBall (0 :: Integer)
-        form = formIfThenElse (exprVar "x" <= exprLit (rational (1 / 2))) formTrue formFalse
-        result = simplifyEvalForm sampleR box form
-    getFormDecision result.evaluatedForm.form `shouldBe` TrueOrFalse
+    let form = formIfThenElse (x <= exprLit 0.5) formTrue formFalse
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- unchanged, since it's not decided
+    resultForm `shouldBe` form
+
+  it "returns values for sub-formulas (True and False)" $ do
+    let form = formTrue && formFalse
+        result = simplifyOverUnitX form
+        formValues = result.evaluatedForm.formValues
+    (formValues Map.! form.root) `shouldBe` CertainFalse -- evaluated as false
+    (formValues Map.! formTrue.root) `shouldBe` CertainTrue -- contains values for sub-formulas
+    (formValues Map.! formFalse.root) `shouldBe` CertainFalse
+
+  it "returns simplification mapping for sub-formulas (True and False)" $ do
+    let form = formTrue && formFalse
+        result = simplifyOverUnitX form
+    (result.oldToNew Map.! form.root) `shouldBe` formFalse.root -- mapping original conjunction to False (simplified)
+    (result.oldToNew Map.! formTrue.root) `shouldBe` formTrue.root -- True cannot be simplified
+    (result.oldToNew Map.! formFalse.root) `shouldBe` formFalse.root

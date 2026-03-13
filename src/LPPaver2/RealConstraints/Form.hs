@@ -64,7 +64,7 @@ instance Show BinaryConn where
   show ConnImpl = "⇒"
 
 newtype FormHash = FormHash {unFormHash :: Int}
-  deriving (P.Eq, P.Ord, Generic)
+  deriving (P.Show, P.Eq, P.Ord, Generic)
 
 instance Hashable FormHash where
   hash (FormHash h) = hash h

@@ -58,6 +58,7 @@ library
     , containers
     , hashable
     , hedis
+    , hspec
     , mixed-types-num
     , monad-logger
     , mtl
@@ -94,6 +95,7 @@ executable lppaver2-example
     , containers
     , hashable
     , hedis
+    , hspec
     , mixed-types-num
     , monad-logger
     , mtl
