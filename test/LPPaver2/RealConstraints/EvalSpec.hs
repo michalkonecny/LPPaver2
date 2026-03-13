@@ -113,12 +113,21 @@ spec = describe "simplifyEvalForm" $ do
     -- simplified to the "else" branch
     resultForm `shouldBe` formElseBranch
 
-  it "leaves if-then-else uncertain when condition is uncertain" $ do
-    let form = formIfThenElse (x <= exprLit 0.5) formTrue formFalse
+  it "simplifies if-then-else when branches are decided (if C then True else False)" $ do
+    let formC = x <= exprLit 0.5
+        form = formIfThenElse formC formTrue formFalse
         result = simplifyOverUnitX form
         resultForm = result.evaluatedForm.form
-    -- unchanged, since it's not decided
-    resultForm `shouldBe` form
+    -- reduced to the undecided condition only since the branches are True and False
+    resultForm `shouldBe` formC
+
+  it "simplifies if-then-else when branches are decided (if C then False else True)" $ do
+    let formC = x <= exprLit 0.5
+        form = formIfThenElse formC formFalse formTrue
+        result = simplifyOverUnitX form
+        resultForm = result.evaluatedForm.form
+    -- reduced to the undecided condition only since the branches are True and False
+    resultForm `shouldBe` not formC
 
   it "returns values for sub-formulas (True and False)" $ do
     let form = formTrue && formFalse

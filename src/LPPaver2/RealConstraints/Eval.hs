@@ -351,13 +351,16 @@ simplifyIf simplifyH result0 h fcH ftH ffH =
       (simplifiedT, _, _, _) = flattenResult resultT
       resultF = simplifyH resultT ffH
       (simplifiedF, exprValuesCTF, formValuesCTF, oldToNewCTF) = flattenResult resultF
+      -- simplify also the negation of the condition, since one of the rules needs it
+      resultCNeg = simplifyUnary simplifyH result0 h ConnNeg fcH
+      (simplifiedCNeg, _, formValuesCNeg, _) = flattenResult resultCNeg
       -- check which of the three sub-formulas are decided
       decisionC = getFormDecision simplifiedC
       decisionT = getFormDecision simplifiedT
       decisionF = getFormDecision simplifiedF
       -- helper for building the result with the simplified form
       buildR decision f =
-        let formValues = Map.insert h decision formValuesCTF
+        let formValues = Map.insert h decision (formValuesCTF `Map.union` formValuesCNeg)
          in buildResult oldToNewCTF h (EvaluatedForm {form = f, exprValues = exprValuesCTF, formValues})
    in case (decisionC, decisionT, decisionF) of
         -- "if True then A else B" is equivalent to A
@@ -368,12 +371,16 @@ simplifyIf simplifyH result0 h fcH ftH ffH =
         (_, CertainTrue, CertainTrue) -> buildR CertainTrue formTrue
         -- "if C then False else False" is always false
         (_, CertainFalse, CertainFalse) -> buildR CertainFalse formFalse
+        -- "if C then True else False" is equivalent to C
+        (_, CertainTrue, CertainFalse) -> buildR TrueOrFalse simplifiedC
+        -- "if C then False else True" is equivalent to not C
+        (_, CertainFalse, CertainTrue) -> buildR TrueOrFalse simplifiedCNeg
         -- "if C then True else B" is equivalent to "C or B"
         (_, CertainTrue, _) -> buildR TrueOrFalse $ simplifiedC || simplifiedF
         -- "if C then False else B" is equivalent to "not C and B"
-        (_, CertainFalse, _) -> buildR TrueOrFalse $ not simplifiedC && simplifiedF
+        (_, CertainFalse, _) -> buildR TrueOrFalse $ simplifiedCNeg && simplifiedF
         -- "if C then A else True" is equivalent to "not C or A"
-        (_, _, CertainTrue) -> buildR TrueOrFalse $ not simplifiedC || simplifiedT
+        (_, _, CertainTrue) -> buildR TrueOrFalse $ simplifiedCNeg || simplifiedT
         -- "if C then A else False" is equivalent to "C and A"
         (_, _, CertainFalse) -> buildR TrueOrFalse $ simplifiedC && simplifiedT
         -- if none of the sub-formulas is decided, retain the if-then-else structure with the simplified sub-formulas
