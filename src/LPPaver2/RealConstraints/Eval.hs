@@ -290,12 +290,16 @@ simplifyBinary simplifyH result0 h binaryConn f1H f2H =
       (simplifiedF1, _, _, _) = flattenResult result1
       result2 = simplifyH result1 f2H
       (simplifiedF2, exprValues12, formValues12, oldToNew12) = flattenResult result2
+      -- simplify also the negation of the first sub-formula, as it is needed for implication simplification
+      resultNegF1 = simplifyUnary simplifyH result1 h ConnNeg f1H
+      (simplifiedNegF1, _, formValues1Neg, _) = flattenResult resultNegF1
+
       -- check if the two sub-formulas are decided
       decision1 = getFormDecision simplifiedF1
       decision2 = getFormDecision simplifiedF2
       -- helper for building the result with the simplified form
       buildR decision f =
-        let formValues = Map.insert h decision formValues12
+        let formValues = Map.insert h decision (Map.union formValues1Neg formValues12)
          in buildResult oldToNew12 h (EvaluatedForm {form = f, exprValues = exprValues12, formValues})
    in case binaryConn of
         ConnAnd ->
@@ -327,8 +331,9 @@ simplifyBinary simplifyH result0 h binaryConn f1H f2H =
             -- "True -> A": true premise can be dropped
             (CertainTrue, _) -> buildR decision2 simplifiedF2
             -- "A -> False": equivalent to "not A"
-            (_, CertainFalse) -> buildR (not decision1) $ not simplifiedF1
-            _ -> buildR (not decision1 || decision2) $ formImpl simplifiedF1 simplifiedF2
+            (_, CertainFalse) -> buildR (not decision1) simplifiedNegF1
+            -- if neither sub-formula is decided, retain the implication, use the simplified sub-formulas
+            _ -> buildR TrueOrFalse $ formImpl simplifiedF1 simplifiedF2
 
 simplifyIf ::
   (SimplifyFormResult r -> FormHash -> SimplifyFormResult r) ->
