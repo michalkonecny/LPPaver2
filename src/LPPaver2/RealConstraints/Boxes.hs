@@ -39,17 +39,7 @@ import Prelude qualified as P
 
 {- N-dimensional Boxes -}
 
-type VarDomains = Map.Map Var MPBall
-
-data Box_
-  = Box_
-  { varDomains :: VarDomains,
-    splitOrder :: [Var],
-    -- | If present, the box is the set of points in varDomains that are not in except.
-    -- ^ This is used to represent the result of pruning a box,
-    -- ^ resulting in another box + the difference between the original and the pruned box.
-    except :: Maybe VarDomains
-  }
+data Box_ = Box_ {varDomains :: Map.Map Var MP.MPBall, splitOrder :: [Var]}
   deriving (Generic, Hashable)
 
 instance P.Eq Box_ where
@@ -69,15 +59,9 @@ boxWithHash :: Box_ -> Box
 boxWithHash box_ = Box {boxHash = BoxHash (hash box_), box_}
 
 instance Show Box where
-  show (Box {box_ = Box_ {varDomains, except}}) =
-    case except of
-      Nothing -> printf "[%s]" $ showVarDomains varDomains
-      Just exceptVarDomains ->
-        printf "[%s] \\ [%s]" (showVarDomains varDomains) (showVarDomains exceptVarDomains)
+  show (Box {box_ = Box_ {varDomains}}) =
+    printf "[%s]" $ List.intercalate ", " $ map showVarDom $ Map.toList varDomains
     where
-      showVarDomains :: VarDomains -> String
-      showVarDomains = List.intercalate ", " . map showVarDom . Map.toList
-
       showVarDom :: (Var, MPBall) -> String
       showVarDom (var, ball) = printf "%s ∈ [%s..%s]" var (show (double l)) (show (double u))
         where
@@ -93,8 +77,7 @@ mkBox varDomainsRational =
     box_ =
       Box_
         { varDomains = Map.fromList (map toBall varDomainsRational),
-          splitOrder = map fst varDomainsRational,
-          except = Nothing
+          splitOrder = map fst varDomainsRational
         }
     toBall (var, (lR, uR)) = (var, MP.mpBall (CentreRadius mR rR))
       where
@@ -111,7 +94,7 @@ boxAreaD box =
 
 {- Collections of boxes. -}
 
-newtype BoxHash = BoxHash {unBoxHash :: Int}
+newtype BoxHash = BoxHash { unBoxHash :: Int }
   deriving (P.Eq, P.Ord, Generic)
 
 instance Hashable BoxHash where
@@ -149,26 +132,21 @@ boxRestrictSplitOrder vars box =
 
 splitBox :: Box -> [Box]
 splitBox box = case box.box_.splitOrder of
-  [] -> error "Internal error: Attempt to split a box with no split order."
+  [] -> [box] -- No split order?? Perhaps there are no variables that can be split, ie are exact points.
   (splitVar : splitRest) ->
     -- We split the first variable in the list.
     let splitOrder = splitRest ++ [splitVar] -- Cycle the variables round-robin-like.
         varDomains = box.box_.varDomains
-     in case box.box_.except of
-          Just _ ->
-            -- This should not happen since except regions are used only for decided regions.
-            error "Internal error: Cannot split a box with an except region."
-          _ ->
-            case Map.lookup splitVar varDomains of
-              Nothing -> error "Internal error: The split variable does not exist."
-              Just splitVarDomain ->
-                [ boxWithHash $ Box_ {varDomains = varDomainsL, splitOrder, except = Nothing},
-                  boxWithHash $ Box_ {varDomains = varDomainsU, splitOrder, except = Nothing}
-                ]
-                where
-                  (splitVarDomainL, splitVarDomainU) = splitMPBall splitVarDomain
-                  varDomainsL = Map.insert splitVar splitVarDomainL varDomains
-                  varDomainsU = Map.insert splitVar splitVarDomainU varDomains
+     in case Map.lookup splitVar varDomains of
+          Nothing -> [box] -- The split variable does not exist.. should not happen.
+          Just splitVarDomain ->
+            [ boxWithHash $ Box_ {varDomains = varDomainsL, splitOrder},
+              boxWithHash $ Box_ {varDomains = varDomainsU, splitOrder}
+            ]
+            where
+              (splitVarDomainL, splitVarDomainU) = splitMPBall splitVarDomain
+              varDomainsL = Map.insert splitVar splitVarDomainL varDomains
+              varDomainsU = Map.insert splitVar splitVarDomainU varDomains
 
 splitMPBall :: MPBall -> (MPBall, MPBall)
 splitMPBall b = (bL, bU)
