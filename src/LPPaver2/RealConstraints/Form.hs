@@ -17,6 +17,7 @@ module LPPaver2.RealConstraints.Form
     getFormDecision,
     formImpl,
     formIfThenElse,
+    formIsComparison,
   )
 where
 
@@ -64,7 +65,7 @@ instance Show BinaryConn where
   show ConnImpl = "⇒"
 
 newtype FormHash = FormHash {unFormHash :: Int}
-  deriving (P.Eq, P.Ord, Generic)
+  deriving (P.Show, P.Eq, P.Ord, Generic)
 
 instance Hashable FormHash where
   hash (FormHash h) = hash h
@@ -185,6 +186,12 @@ formComp comp e1 e2 =
   where
     e = FormComp {comp, e1 = e1.root, e2 = e2.root}
     h = FormHash (hash e)
+
+formIsComparison :: Form -> Bool
+formIsComparison form =
+  case lookupFormNode form form.root of
+    FormComp {} -> True
+    _ -> False
 
 flipStrictness :: BinaryComp -> BinaryComp
 flipStrictness CompLe = CompLeq

@@ -27,6 +27,7 @@ library
   exposed-modules:
       LPPaver2.BranchAndPrune
       LPPaver2.Export
+      LPPaver2.LinearPrune
       LPPaver2.RealConstraints
       LPPaver2.RealConstraints.Boxes
       LPPaver2.RealConstraints.Eval
@@ -58,6 +59,7 @@ library
     , containers
     , hashable
     , hedis
+    , hspec
     , mixed-types-num
     , monad-logger
     , mtl
@@ -94,6 +96,47 @@ executable lppaver2-example
     , containers
     , hashable
     , hedis
+    , hspec
+    , mixed-types-num
+    , monad-logger
+    , mtl
+    , text
+    , time
+    , transformers
+    , unliftio-core
+  default-language: Haskell2010
+
+test-suite LPPaver2-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      LPPaver2.LinearPruneSpec
+      LPPaver2.RealConstraints.EvalSpec
+      Paths_LPPaver2
+  autogen-modules:
+      Paths_LPPaver2
+  hs-source-dirs:
+      test
+  default-extensions:
+      GHC2021
+      RebindableSyntax
+      DuplicateRecordFields
+      RecordWildCards
+      OverloadedRecordDot
+      TypeFamilies
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-orphans -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      LPPaver2
+    , aern2-affarith
+    , aern2-mp
+    , aeson
+    , base >=4.7 && <5
+    , branch-and-prune
+    , bytestring
+    , containers
+    , hashable
+    , hedis
+    , hspec
     , mixed-types-num
     , monad-logger
     , mtl

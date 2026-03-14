@@ -9,21 +9,74 @@ import type { FormValues } from './evalInfo';
 const props = defineProps<{
   form?: Form;
   formValues?: FormValues;
-  widthLimit: number;
+  inInfo: InInfo;
   highlightedSubFormExpr?: FormOrExprHash;
 }>();
 
+/**
+ ```
+  +------------------------+
+  |         other          |
+  | +-------------+        |     
+  | |  DIE        |        |  
+  | |      +------+------+ |
+  | |      |  IE  |      | |
+  | +------+------+      | |
+  |        |        CIE  | |
+  |        +-------------+ |
+  +------------------------+
+```
+*/
+type IEFormType =
+  "IE" | // inequality
+  "CIE" | // conjunction of inequalities (including ==)
+  "DIE" | // disjunction of inequalities (including !=)
+  "Other";
+
+type InInfo = { 
+  widthLimit: number;
+  couldBeFormType: IEFormType;
+}
+
+type OutInfo = {
+  width: number;
+  formType: IEFormType;
+}
+
+const outInfo = ref<OutInfo>();
+
+const formType = computed<IEFormType>(() => {
+  if(!outInfo.value) return 'Other';
+  
+  const couldBeFormType = props.inInfo.couldBeFormType;
+  const myType = outInfo.value.formType;
+  
+  // the most specific type
+  if (couldBeFormType === 'IE' && myType === 'IE')  return "IE";
+    
+  const couldBeCIE = _.includes(['CIE', 'IE'], couldBeFormType);
+  const isCIE = _.includes(['CIE', 'IE'], myType);
+  if (couldBeCIE && isCIE) return "CIE";
+
+  const couldBeDIE = _.includes(['DIE', 'IE'], couldBeFormType);
+  const isDIE = _.includes(['DIE', 'IE'], myType);
+  if (couldBeDIE && isDIE) return "DIE";
+
+  return 'Other';
+})
+
 const emits = defineEmits<{
-  (e: 'width', width: number): void;
+  (e: 'outInfo', info: OutInfo): void;
   (e: 'click', data: FormOrExprHash): void;
 }>();
 
-function emitWidth(width: number) {
-  emits('width', width);
+function emitOutInfo(info: OutInfo) {
+  emits('outInfo', info);
+  outInfo.value = info;
 }
 
-function emitWidthFromString(result: string) {
-  emitWidth(result.length);
+function emitOutInfoFromString(result: string) {
+  emitOutInfo({ width: result.length, formType: "Other" });
   return result;
 }
 
@@ -49,7 +102,7 @@ const binaryCompSymbol = computed(() => {
 
 const binaryCompChildWidthLimit = computed(() => {
   // assuming horizontal layout (worst case)
-  return props.widthLimit - 1; // 1 for space
+  return props.inInfo.widthLimit - 1; // 1 for space
 });
 
 const e1Width = ref<number | null>(null);
@@ -73,7 +126,7 @@ const binaryCompTotalWidthIfVertical = computed(() => {
 });
 
 const binaryCompFitsHorizontal = computed(() => {
-  return binaryCompTotalWidthIfHorizontal.value <= props.widthLimit;
+  return binaryCompTotalWidthIfHorizontal.value <= props.inInfo.widthLimit;
 });
 
 // when both e1Width and e2Width are set, emit total width
@@ -81,13 +134,18 @@ watch(binaryCompTotalWidthIfHorizontal, w => {
   // binary comparison, both children's widths are needed
   if (props.form?.f.tag === 'FormComp') {
     if (e1Width.value !== null && e2Width.value !== null) {
-      if (binaryCompFitsHorizontal.value) {
-        // enough horizontal space, using horizontal layout
-        emitWidth(binaryCompTotalWidthIfHorizontal.value);
-      } else {
-        // not enough horizontal space, using vertical layout
-        emitWidth(binaryCompTotalWidthIfVertical.value);
-      }
+      const totalWidth = binaryCompFitsHorizontal.value
+        ? binaryCompTotalWidthIfHorizontal.value // enough horizontal space, using horizontal layout
+        : binaryCompTotalWidthIfVertical.value; // not enough horizontal space, using vertical layout
+
+      const comp = props.form.f.comp;
+      emitOutInfo({
+        width: totalWidth,
+        formType:
+          comp == "CompEq" ? 'CIE' // == is a conjunction of two inequalities
+            : comp == "CompNeq" ? 'DIE' // != is a disjunction of two inequalities
+              : 'IE', // < or <= is a single inequality
+      });
     }
   }
 });
@@ -102,22 +160,28 @@ const unaryConnSymbol = computed(() => {
     : '';
 });
 
-const unaryChildWidthLimit = computed(() => {
-  return props.widthLimit - 1 - unaryConnSymbol.value.length;
+const unaryChildInInfo = computed<InInfo>(() => {
+  return {
+    widthLimit: props.inInfo.widthLimit - 1 - unaryConnSymbol.value.length,
+    couldBeFormType: 'Other',
+  };
 });
 
-const fWidth = ref<number | null>(null);
+const fOutInfo = ref<OutInfo | null>(null);
 
-function setFWidth(w: number) { fWidth.value = w; }
+function setFOutInfo(info: OutInfo) { fOutInfo.value = info; }
 
 const unaryTotalWidth = computed(() => {
-  return unaryConnSymbol.value.length + 1 + (fWidth.value ?? 0); // 1 for space
+  return unaryConnSymbol.value.length + 1 + (fOutInfo.value?.width ?? 0); // 1 for space
 });
 
-// when fWidth is set, emit total width
+// when fOutInfo is set, emit our out info with the total width
 watch(unaryTotalWidth, w => {
-  if (props.form?.f.tag == 'FormUnary' && fWidth.value !== null) {
-    emitWidth(w);
+  if (props.form?.f.tag == 'FormUnary' && fOutInfo.value !== null) {
+    emitOutInfo({
+      width: w,
+      formType: 'Other', // a unary formula is not an inequality, or conjunction/disjuction of inequalities
+    });
   }
 });
 
@@ -131,47 +195,66 @@ const binaryConnSymbol = computed(() => {
     : '';
 });
 
-const binaryChildWidthLimit = computed(() => {
+const binaryChildInInfo = computed<InInfo>(() => {
   // assuming horizontal layout (worst case)
-  return props.widthLimit - 1; // 1 for space
+  const connSymbol = binaryConnSymbol.value;
+  const myCouldBeFormType = props.inInfo.couldBeFormType;
+  const couldByCIE = _.includes(['CIE', 'IE'], myCouldBeFormType) && connSymbol === '∧';
+  const couldByDIE = _.includes(['DIE', 'IE'], myCouldBeFormType) && connSymbol === '∨';
+  return {
+    widthLimit: props.inInfo.widthLimit - 1, // 1 for space
+    couldBeFormType: couldByCIE ? 'CIE' : couldByDIE ? 'DIE' : 'Other',
+  };
 });
 
-const f1Width = ref<number | null>(null);
-const f2Width = ref<number | null>(null);
+const f1OutInfo = ref<OutInfo | null>(null);
+const f2OutInfo = ref<OutInfo | null>(null);
 
-function setF1Width(w: number) { f1Width.value = w; }
-function setF2Width(w: number) { f2Width.value = w; }
+function setF1OutInfo(info: OutInfo) { f1OutInfo.value = info; }
+function setF2OutInfo(info: OutInfo) { f2OutInfo.value = info; }
 
 const binaryConnTotalWidthIfHorizontal = computed(() => {
-  if (f1Width.value === null || f2Width.value === null) {
+  if (f1OutInfo.value === null || f2OutInfo.value === null) {
     return 0;
   }
-  return f1Width.value + f2Width.value + binaryConnSymbol.value.length + 2; // 2 for spaces
+  return f1OutInfo.value.width + f2OutInfo.value.width + binaryConnSymbol.value.length + 2; // 2 for spaces
 });
 
 const binaryConnFitsHorizontal = computed(() => {
-  return binaryConnTotalWidthIfHorizontal.value <= props.widthLimit;
+  return binaryConnTotalWidthIfHorizontal.value <= props.inInfo.widthLimit;
 });
 
 const binaryConnTotalWidthIfVertical = computed(() => {
-  if (f1Width.value === null || f2Width.value === null) {
+  if (f1OutInfo.value === null || f2OutInfo.value === null) {
     return 0;
   }
-  return Math.max(f1Width.value, f2Width.value) + 1; // 1 for space
+  return Math.max(f1OutInfo.value.width, f2OutInfo.value.width) + 1; // 1 for space
 });
 
-// when both f1Width and f2Width are set, emit total width
+// when both f1OutInfo and f2OutInfo are set, emit out info with the total width and form type
 watch(binaryConnTotalWidthIfHorizontal, w => {
   // binary formula, both children's widths are needed
   if (props.form?.f.tag === 'FormBinary') {
-    if (f1Width.value !== null && f2Width.value !== null) {
-      if (binaryConnFitsHorizontal.value) {
-        // enough horizontal space, using horizontal layout
-        emitWidth(binaryConnTotalWidthIfHorizontal.value);
-      } else {
-        // not enough horizontal space, using vertical layout
-        emitWidth(binaryConnTotalWidthIfVertical.value);
-      }
+    if (f1OutInfo.value !== null && f2OutInfo.value !== null) {
+      const totalWidth = binaryConnFitsHorizontal.value
+        ? binaryConnTotalWidthIfHorizontal.value // enough horizontal space, using horizontal layout
+        : binaryConnTotalWidthIfVertical.value; // not enough horizontal space, using vertical layout
+
+      const f1IsCIE = _.includes(['CIE', 'IE'], f1OutInfo.value.formType);
+      const f2IsCIE = _.includes(['CIE', 'IE'], f2OutInfo.value.formType);
+
+      const f1IsDIE = _.includes(['DIE', 'IE'], f1OutInfo.value.formType);
+      const f2IsDIE = _.includes(['DIE', 'IE'], f2OutInfo.value.formType);
+
+      const formType: IEFormType =
+        props.form.f.bconn == "ConnAnd" && f1IsCIE && f2IsCIE ? 'CIE' // conjunction of inequalities
+          : props.form.f.bconn == "ConnOr" && f1IsDIE && f2IsDIE ? 'DIE' // disjunction of inequalities
+            : 'Other';
+
+      emitOutInfo({
+        width: totalWidth,
+        formType,
+      });
     }
   }
 });
@@ -180,50 +263,55 @@ watch(binaryConnTotalWidthIfHorizontal, w => {
 // for if-then-else formulas
 ////////////////////////////
 
-const iteChildWidthLimit = computed(() => {
+const iteChildInInfo = computed<InInfo>(() => {
   // assuming horizontal layout (worst case)
-  return props.widthLimit - 1; // 1 for space
+  return { 
+    widthLimit: props.inInfo.widthLimit - 1, // 1 for space
+    couldBeFormType: 'Other'
+   };
 });
 
-const fcWidth = ref<number | null>(null);
-const ftWidth = ref<number | null>(null);
-const ffWidth = ref<number | null>(null);
+const fcOutInfo = ref<OutInfo | null>(null);
+const ftOutInfo = ref<OutInfo | null>(null);
+const ffOutInfo = ref<OutInfo | null>(null);
 
-function setFcWidth(w: number) { fcWidth.value = w; }
-function setFtWidth(w: number) { ftWidth.value = w; }
-function setFfWidth(w: number) { ffWidth.value = w; }
+function setFcOutInfo(info: OutInfo) { fcOutInfo.value = info; }
+function setFtOutInfo(info: OutInfo) { ftOutInfo.value = info; }
+function setFfOutInfo(info: OutInfo) { ffOutInfo.value = info; }
 
 const iteTotalWidthIfHorizontal = computed(() => {
-  if (fcWidth.value === null || ftWidth.value === null || ffWidth.value === null) {
+  if (fcOutInfo.value === null || ftOutInfo.value === null || ffOutInfo.value === null) {
     return 0;
   }
-  return fcWidth.value + ftWidth.value + ffWidth.value + 13;
+  return fcOutInfo.value.width + ftOutInfo.value.width + ffOutInfo.value.width + 13;
   // 13 for spaces and keywords "if", "then", "else" (10 chars) + 3 for spaces
 });
 
 const iteFitsHorizontal = computed(() => {
-  return iteTotalWidthIfHorizontal.value <= props.widthLimit;
+  return iteTotalWidthIfHorizontal.value <= props.inInfo.widthLimit;
 });
 
 const iteTotalWidthIfVertical = computed(() => {
-  if (fcWidth.value === null || ftWidth.value === null || ffWidth.value === null) {
+  if (fcOutInfo.value === null || ftOutInfo.value === null || ffOutInfo.value === null) {
     return 0;
   }
-  return Math.max(fcWidth.value, ftWidth.value, ffWidth.value) + 1; // 1 for space
+  return Math.max(fcOutInfo.value.width, ftOutInfo.value.width, ffOutInfo.value.width) + 1; // 1 for space
 });
 
-// when fcWidth, ftWidth, and ffWidth are set, emit total width
+// when fcOutInfo, ftOutInfo, and ffOutInfo are set, emit out info with the total width and form type
 watch(iteTotalWidthIfHorizontal, w => {
   // if-then-else formula, all children's widths are needed
   if (props.form?.f.tag === 'FormIfThenElse') {
-    if (fcWidth.value !== null && ftWidth.value !== null && ffWidth.value !== null) {
-      if (iteFitsHorizontal.value) {
-        // enough horizontal space, using horizontal layout
-        emitWidth(iteTotalWidthIfHorizontal.value);
-      } else {
-        // not enough horizontal space, using vertical layout
-        emitWidth(iteTotalWidthIfVertical.value);
-      }
+    if (fcOutInfo.value !== null && ftOutInfo.value !== null && ffOutInfo.value !== null) {
+
+      const totalWidth = iteFitsHorizontal.value
+        ? iteTotalWidthIfHorizontal.value // enough horizontal space, using horizontal layout
+        : iteTotalWidthIfVertical.value; // not enough horizontal space, using vertical layout
+
+      emitOutInfo({
+        width: totalWidth,
+        formType: 'Other', // if-then-else formulas are neither CIEs or DIEs
+      });
     }
   }
 });
@@ -242,10 +330,14 @@ const isHighlighted = computed(() =>
 const highlightedSubExpr = computed(() =>
   props.highlightedSubFormExpr?.type === 'expr' ? props.highlightedSubFormExpr.exprHash : undefined);
 
+const isTopLevelComparison = computed(() => props.form?.f.tag === 'FormComp' && formType.value !== 'Other');
+
 const style = computed<StyleValue>(() => {
   return {
     'backgroundColor': colour.value,
-    'border': isHighlighted.value ? '1.5px solid blue' : '0.5px solid grey',
+    'border': isTopLevelComparison.value 
+      ? isHighlighted.value ? '2.5px dashed blue' : '2.5px dashed black'
+      : isHighlighted.value ? '1.5px solid blue' : '0.5px solid grey',
   };
 });
 
@@ -257,8 +349,8 @@ const style = computed<StyleValue>(() => {
   </span>
   <span v-else @click="clickedHere">
     <!-- literal formulas True / False -->
-    <span v-if="form.f.tag === 'FormTrue'" :style="style">{{ emitWidthFromString('True') }}</span>
-    <span v-else-if="form.f.tag === 'FormFalse'" :style="style">{{ emitWidthFromString('False') }}</span>
+    <span v-if="form.f.tag === 'FormTrue'" :style="style">{{ emitOutInfoFromString('True') }}</span>
+    <span v-else-if="form.f.tag === 'FormFalse'" :style="style">{{ emitOutInfoFromString('False') }}</span>
     <!-- comparisons -->
     <span v-else-if="form.f.tag === 'FormComp'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !binaryCompFitsHorizontal, 'align-items-center': true }">
@@ -266,7 +358,7 @@ const style = computed<StyleValue>(() => {
         <FormattedExpr :expr="form.f.e1" :widthLimit="binaryCompChildWidthLimit" @width="setE1Width"
           @click="(e) => emits('click', { type: 'expr', exprHash: e })" :highlightedExpr="highlightedSubExpr" />
       </span>
-      {{ binaryCompSymbol }}
+      <span :class="{ 'fw-bold': formType != 'Other' }">{{ binaryCompSymbol }}</span>
       <span class="px-1">
         <FormattedExpr :expr="form.f.e2" :widthLimit="binaryCompChildWidthLimit" @width="setE2Width"
           @click="(e) => emits('click', { type: 'expr', exprHash: e })" :highlightedExpr="highlightedSubExpr" />
@@ -277,40 +369,44 @@ const style = computed<StyleValue>(() => {
       class="d-flex align-items-center justify-content-center">
       {{ unaryConnSymbol }}
       <span class="px-1">
-        <FormattedForm :form="form.f.f1" :formValues="formValues" :widthLimit="unaryChildWidthLimit" @width="setFWidth"
-          @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
+        <FormattedForm :form="form.f.f1" :formValues="formValues" :inInfo="unaryChildInInfo"
+          @outInfo="setFOutInfo" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
     </span>
+
     <!-- binary logical connectors -->
     <span v-else-if="form.f.tag === 'FormBinary'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !binaryConnFitsHorizontal, 'align-items-center': true }">
       <span class="px-1">
-        <FormattedForm :form="form.f.f1" :formValues="formValues" :widthLimit="binaryChildWidthLimit"
-          @width="setF1Width" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
+        <FormattedForm :form="form.f.f1" :formValues="formValues" :inInfo="binaryChildInInfo"
+          @outInfo="setF1OutInfo" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
-      {{ binaryConnSymbol }}
+      <span :class="{ 'fw-bold': formType != 'Other' }">
+        {{ binaryConnSymbol }}
+      </span>
       <span class="px-1">
-        <FormattedForm :form="form.f.f2" :formValues="formValues" :widthLimit="binaryChildWidthLimit"
-          @width="setF2Width" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
+        <FormattedForm :form="form.f.f2" :formValues="formValues" :inInfo="binaryChildInInfo"
+          @outInfo="setF2OutInfo" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
     </span>
+
     <!-- if-then-else formulas -->
     <span v-else-if="form.f.tag === 'FormIfThenElse'" :style="style"
       :class="{ 'd-flex': true, 'flex-column': !iteFitsHorizontal, 'align-items-center': true }">
       <span>If</span>
       <span class="px-1">
-        <FormattedForm :form="form.f.fc" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFcWidth"
-          @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
+        <FormattedForm :form="form.f.fc" :formValues="formValues" :inInfo="iteChildInInfo"
+          @outInfo="setFcOutInfo" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
       then
       <span class="px-1">
-        <FormattedForm :form="form.f.ft" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFtWidth"
-          @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
+        <FormattedForm :form="form.f.ft" :formValues="formValues" :inInfo="iteChildInInfo"
+          @outInfo="setFtOutInfo" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
       else
       <span class="px-1">
-        <FormattedForm :form="form.f.ff" :formValues="formValues" :widthLimit="iteChildWidthLimit" @width="setFfWidth"
-          @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
+        <FormattedForm :form="form.f.ff" :formValues="formValues" :inInfo="iteChildInInfo"
+          @outInfo="setFfOutInfo" @click="(d) => emits('click', d)" :highlightedSubFormExpr="highlightedSubFormExpr" />
       </span>
     </span>
   </span>
