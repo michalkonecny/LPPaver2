@@ -1,30 +1,32 @@
 module LPPaver2.LinearPrune
   ( extractCIEorDIE,
     IEFormType (..),
+    linearPrune,
+    LinearPruneResult (..),
   )
 where
 
-import GHC.Records (HasField (..))
+import BranchAndPrune.BranchAndPrune qualified as BP
+import GHC.Records
+import LPPaver2.RealConstraints.Boxes
 import LPPaver2.RealConstraints.Form
 import MixedTypesNumPrelude
 import Prelude qualified as P
 
-{-|
-
-@
-      +------------------------+
-      |         other          |
-      | +-------------+        |     
-      | |  DIE        |        |  
-      | |      +------+------+ |
-      | |      |  IE  |      | |
-      | +------+------+      | |
-      |        |        CIE  | |
-      |        +-------------+ |
-      +------------------------+
-@
-
--}
+-- |
+--
+-- @
+--       +------------------------+
+--       |         other          |
+--       | +-------------+        |
+--       | |  DIE        |        |
+--       | |      +------+------+ |
+--       | |      |  IE  |      | |
+--       | +------+------+      | |
+--       |        |        CIE  | |
+--       |        +-------------+ |
+--       +------------------------+
+-- @
 data IEFormType
   = IE -- single inequality
   | CIE -- conjunction of inequalities
@@ -74,3 +76,11 @@ extractCIEorDIE form0 = extractH form0.root
                         _ -> Nothing
                     _ -> Nothing
             _ -> Nothing
+
+data LinearPruneResult = LinearPruneResult
+  { maybeRemainingBox :: Maybe Box,
+    removedRegionTruth :: Bool
+  }
+
+linearPrune :: BP.Problem Form Box -> Maybe LinearPruneResult
+linearPrune problem = Nothing -- TODO : implement linear pruning 

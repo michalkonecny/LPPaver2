@@ -23,6 +23,7 @@ import Control.Monad.Logger (MonadLogger)
 import Data.Hashable (Hashable (hash))
 import Data.Map qualified as Map
 import GHC.Records
+import LPPaver2.LinearPrune (LinearPruneResult (..), linearPrune)
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
 import Text.Printf (printf)
@@ -138,17 +139,52 @@ instance
   (CanEval r, HasKleeneanComparison r, Applicative m) =>
   BP.CanPrune m r Form Box Boxes (EvaluatedForm r)
   where
-  pruneProblemM sampleR (BP.Problem {scope, constraint}) = pure (pavingP, result.evaluatedForm)
+  pruneProblemM sampleR (BP.Problem {scope, constraint}) =
+    pure (pavingP, simplificationResult.evaluatedForm)
     where
-      result = simplifyEvalForm sampleR scope constraint
-      simplifiedForm = result.evaluatedForm.form
+      simplificationResult = simplifyEvalForm sampleR scope constraint
+      simplifiedForm = simplificationResult.evaluatedForm.form
+      -- remove unused variables from the split order:
       simplifiedScope = boxRestrictSplitOrder (formVariables simplifiedForm) scope
-      mkBoxes box = Boxes {store = Map.fromList [(box.boxHash, box)]}
-      pavingP :: BP.Paving Form Box Boxes
-      pavingP = case getFormDecision simplifiedForm of
-        CertainTrue -> BP.pavingInner scope (mkBoxes scope)
-        CertainFalse -> BP.pavingOuter scope (mkBoxes scope)
-        _ -> BP.pavingUndecided scope [BP.Problem {scope = simplifiedScope, constraint = simplifiedForm}]
+      simplifiedFormProblem = BP.Problem {scope = simplifiedScope, constraint = simplifiedForm}
+
+      pavingP =
+        -- first see if simple evaluation decides the problem:
+        case getFormDecision simplifiedForm of
+          CertainTrue -> BP.pavingInner scope (mkBoxes scope)
+          CertainFalse -> BP.pavingOuter scope (mkBoxes scope)
+          _ ->
+            -- if not decided, see if linear pruning can decide the problem or at least reduce the box:
+            case linearPrune simplifiedFormProblem of
+              Just linearPruneResult ->
+                -- if linear pruning can help, return the paving with the reduced box and simplified form:
+                mkLinearPrunePaving scope simplifiedForm linearPruneResult
+              _ ->
+                -- if linear pruning cannot help, return the simplified problem as undecided with unchanged scope:
+                BP.pavingUndecided scope [simplifiedFormProblem]
+        where
+          mkBoxes box = Boxes {store = Map.fromList [(box.boxHash, box)]}
+
+mkLinearPrunePaving :: Box -> Form -> LinearPruneResult -> BP.Paving Form Box Boxes
+mkLinearPrunePaving scope simplifiedForm LinearPruneResult {maybeRemainingBox, removedRegionTruth} =
+  case maybeRemainingBox of
+    Nothing ->
+      -- linear pruning decided the whole box
+      if removedRegionTruth
+        then BP.pavingInner scope (mkBoxes scope) -- true on scope
+        else BP.pavingOuter scope (mkBoxes scope) -- false on scope
+    Just remainingBox ->
+      -- linear pruning 
+      let remainingProblem = BP.Problem {scope = remainingBox, constraint = simplifiedForm}
+          decidedBoxes = mkBoxes $ mkBoxDifference scope remainingBox
+       in BP.Paving
+            { scope,
+              inner = if removedRegionTruth then decidedBoxes else BP.emptySet,
+              outer = if removedRegionTruth then BP.emptySet else decidedBoxes,
+              undecided = [remainingProblem]
+            }
+  where
+    mkBoxes box = Boxes {store = Map.fromList [(box.boxHash, box)]}
 
 newtype BoxStack = BoxStack [LPPProblem]
 

@@ -6,6 +6,7 @@ module LPPaver2.RealConstraints.Boxes
     Box (..),
     Box_ (..),
     mkBox,
+    mkBoxDifference,
     boxAreaD,
     splitBox,
     BoxHash (..),
@@ -100,6 +101,14 @@ mkBox varDomainsRational =
       where
         mR = (lR + uR) / 2
         rR = (uR - lR) / 2
+
+mkBoxDifference :: Box -> Box -> Box
+mkBoxDifference (Box {box_ = box1}) (Box {box_ = box2}) =
+  boxWithHash $ Box_
+  { varDomains = box1.varDomains,
+    splitOrder = box1.splitOrder,
+    except = Just box2.varDomains
+  }
 
 boxAreaD :: Box -> Double
 boxAreaD box =
