@@ -83,4 +83,21 @@ data LinearPruneResult = LinearPruneResult
   }
 
 linearPrune :: BP.Problem Form Box -> Maybe LinearPruneResult
-linearPrune problem = Nothing -- TODO : implement linear pruning 
+linearPrune BP.Problem {scope, constraint} =
+  let maybeIEInfo = extractCIEorDIE constraint
+   in case maybeIEInfo of
+        Just (cieForm, CIE) -> linearPruneCIE scope (extractIEsFromCIE cieForm)
+        Just (ieForm, IE) -> linearPruneCIE scope [ieForm]
+        _ -> Nothing -- not a form suitable for linear pruning
+
+extractIEsFromCIE :: Form -> [Form]
+extractIEsFromCIE form0 = aux form0.root
+  where
+    aux formH =
+      case lookupFormNode form0 formH of
+        FormComp {} -> [form0 {root = formH}]
+        FormBinary {bconn = ConnAnd, f1, f2} -> aux f1 ++ aux f2
+        _ -> error "extractIEsFromCIE: not a CIE form"
+
+linearPruneCIE :: Box -> [Form] -> Maybe LinearPruneResult
+linearPruneCIE scope ies = Nothing -- TODO : implement linear pruning for conjunctions of inequalities
