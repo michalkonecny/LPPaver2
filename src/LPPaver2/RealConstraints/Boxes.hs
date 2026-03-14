@@ -46,9 +46,9 @@ data Box_
   = Box_
   { varDomains :: VarDomains,
     splitOrder :: [Var],
-    -- | If present, the box is the set of points in varDomains that are not in except.
-    -- ^ This is used to represent the result of pruning a box,
-    -- ^ resulting in another box + the difference between the original and the pruned box.
+    -- | This is used to represent the result of pruning a box,
+    -- resulting in another box + the difference between the original and the pruned box.
+    -- If 'except' present, the box is the set of points in varDomains that are not in except.
     except :: Maybe VarDomains
   }
   deriving (Generic, Hashable)
@@ -104,11 +104,12 @@ mkBox varDomainsRational =
 
 mkBoxDifference :: Box -> Box -> Box
 mkBoxDifference (Box {box_ = box1}) (Box {box_ = box2}) =
-  boxWithHash $ Box_
-  { varDomains = box1.varDomains,
-    splitOrder = box1.splitOrder,
-    except = Just box2.varDomains
-  }
+  boxWithHash
+    $ Box_
+      { varDomains = box1.varDomains,
+        splitOrder = box1.splitOrder,
+        except = Just box2.varDomains
+      }
 
 boxAreaD :: Box -> Double
 boxAreaD box =

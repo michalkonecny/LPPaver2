@@ -87,7 +87,8 @@ linearPrune BP.Problem {scope, constraint} =
   let maybeIEInfo = extractCIEorDIE constraint
    in case maybeIEInfo of
         Just (cieForm, CIE) -> linearPruneCIE scope (extractIEsFromCIE cieForm)
-        Just (ieForm, IE) -> linearPruneCIE scope [ieForm]
+        Just (ieForm, IE) -> linearPruneCIE scope [ieForm] -- TODO: try both CIE and DIE and use the better result
+        Just (dieForm, DIE) -> Nothing -- TODO : implement linear pruning for disjunctions of inequalities
         _ -> Nothing -- not a form suitable for linear pruning
 
 extractIEsFromCIE :: Form -> [Form]
