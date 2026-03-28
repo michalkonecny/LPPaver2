@@ -4,6 +4,7 @@
 module LPPaver2.RealConstraints.Form
   ( Form (..),
     lookupFormNode,
+    lookupFormExprNode,
     formVariables,
     FormHash (..),
     FormNode,
@@ -88,6 +89,12 @@ data Form = Form
 lookupFormNode :: Form -> FormHash -> FormNode
 lookupFormNode form h =
   case Map.lookup h form.nodesF of
+    Just node -> node
+    Nothing -> error "Missing node in formula"
+
+lookupFormExprNode :: Form -> ExprHash -> ExprNode
+lookupFormExprNode form h =
+  case Map.lookup h form.nodesE of
     Just node -> node
     Nothing -> error "Missing node in formula"
 

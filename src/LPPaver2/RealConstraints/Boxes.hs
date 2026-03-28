@@ -5,6 +5,7 @@ module LPPaver2.RealConstraints.Boxes
   ( --
     Box (..),
     Box_ (..),
+    boxWithHash,
     mkBox,
     mkBoxDifference,
     boxAreaD,
@@ -51,7 +52,7 @@ data Box_
     -- If 'except' present, the box is the set of points in varDomains that are not in except.
     except :: Maybe VarDomains
   }
-  deriving (Generic, Hashable)
+  deriving (Generic, Hashable, Show)
 
 instance P.Eq Box_ where
   b1 == b2 = varDomainsR b1 == varDomainsR b2

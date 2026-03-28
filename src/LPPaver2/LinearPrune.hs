@@ -6,11 +6,17 @@ module LPPaver2.LinearPrune
   )
 where
 
+import AERN2.MP (HasPrecision (..), mpBallP)
+import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
+import Data.Map qualified as Map
+import Debug.Trace (trace)
 import GHC.Records
+import LPPaver2.RealConstraints (ExprF (..))
 import LPPaver2.RealConstraints.Boxes
 import LPPaver2.RealConstraints.Form
 import MixedTypesNumPrelude
+import Text.Printf (printf)
 import Prelude qualified as P
 
 -- |
@@ -88,7 +94,7 @@ linearPrune BP.Problem {scope, constraint} =
    in case maybeIEInfo of
         Just (cieForm, CIE) -> linearPruneCIE scope (extractIEsFromCIE cieForm)
         Just (ieForm, IE) -> linearPruneCIE scope [ieForm] -- TODO: try both CIE and DIE and use the better result
-        Just (dieForm, DIE) -> Nothing -- TODO : implement linear pruning for disjunctions of inequalities
+        -- TODO: implement linear pruning for disjunctions of inequalities
         _ -> Nothing -- not a form suitable for linear pruning
 
 extractIEsFromCIE :: Form -> [Form]
@@ -101,4 +107,84 @@ extractIEsFromCIE form0 = aux form0.root
         _ -> error "extractIEsFromCIE: not a CIE form"
 
 linearPruneCIE :: Box -> [Form] -> Maybe LinearPruneResult
-linearPruneCIE scope ies = Nothing -- TODO : implement linear pruning for conjunctions of inequalities
+linearPruneCIE scope ies
+  | isImprovement = Just result
+  | otherwise = Nothing
+  where
+    varBoundsFromInequalities = P.concatMap extractVarBound ies
+      where
+        extractVarBound form =
+          case lookupFormNode form form.root of
+            FormComp {comp, e1, e2} ->
+              case (lookupFormExprNode form e1, comp, lookupFormExprNode form e2) of
+                (ExprVar var, CompLe, ExprLit q) -> [(var, (Nothing, Just q))]
+                (ExprVar var, CompLeq, ExprLit q) -> [(var, (Nothing, Just q))]
+                (ExprLit q, CompLe, ExprVar var) -> [(var, (Just q, Nothing))]
+                (ExprLit q, CompLeq, ExprVar var) -> [(var, (Just q, Nothing))]
+                _ -> []
+            _ -> [] -- not a comparison, shouldn't happen since we only call this on IEs
+    varDomains = scope.box_.varDomains
+    varDomainsWithInequalities = foldl applyBound varDomains varBoundsFromInequalities
+      where
+        applyBound varDoms (var, (Just qL, _)) =
+          Map.update (updateLower qL) var varDoms
+        applyBound varDoms (var, (_, Just qU)) =
+          Map.update (updateUpper qU) var varDoms
+        applyBound varDoms _ = varDoms -- shouldn't happen since we only call this on IEs
+        updateLower qL ball =
+          -- trace
+          --   ( printf
+          --       "updateLower: qL = %s, prec = %s, qLB = %s, ball = %s, result = %s"
+          --       (show qL)
+          --       (show (getPrecision ball))
+          --       (show qLMB)
+          --       (show ball)
+          --       (show res)
+          --   )
+          Just res
+          where
+            res = qLMB `max` ball
+            qLMB = mpBallP (getPrecision ball) qL
+        updateUpper qU ball =
+          -- trace
+          --   ( printf
+          --       "updateUpper: qU = %s, prec = %s, qUB = %s, ball = %s, result = %s"
+          --       (show qU)
+          --       (show (getPrecision ball))
+          --       (show qUMB)
+          --       (show ball)
+          --       (show res)
+          --   )
+          Just res
+          where
+            res = qUMB `min` ball
+            qUMB = mpBallP (getPrecision ball) qU
+    isImprovement =
+      -- trace
+      --   ( printf
+      --       "linearPruneCIE:\n varDomains = %s\n varDomainsWithInequalities = %s\n improvements = %s\n isImprovement = %s"
+      --       (show varDomains)
+      --       (show varDomainsWithInequalities)
+      --       (show improvements)
+      --       (show res)
+      --   )
+      res
+      where
+        res = P.any (> 0.1) $ Map.elems improvements
+        improvements = Map.intersectionWith measureImprovement varDomains varDomainsWithInequalities
+        measureImprovement ballOld ballNew =
+          let rOld = MP.radius ballOld
+              rNew = MP.radius ballNew
+           in (rational rOld - rational rNew) / rational rOld
+    newBox =
+      boxWithHash
+        Box_
+          { varDomains = varDomainsWithInequalities,
+            splitOrder = scope.box_.splitOrder,
+            except = Nothing
+          }
+    result =
+      LinearPruneResult
+        { maybeRemainingBox = Just newBox,
+          removedRegionTruth = False
+        }
