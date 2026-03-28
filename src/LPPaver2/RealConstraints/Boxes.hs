@@ -97,7 +97,7 @@ mkBox varDomainsRational =
           splitOrder = map fst varDomainsRational,
           except = Nothing
         }
-    toBall (var, (lR, uR)) = (var, MP.mpBall (CentreRadius mR rR))
+    toBall (var, (lR, uR)) = (var, MP.mpBallP (MP.prec 100) (CentreRadius mR rR))
       where
         mR = (lR + uR) / 2
         rR = (uR - lR) / 2
