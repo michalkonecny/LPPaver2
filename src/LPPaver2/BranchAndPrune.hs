@@ -27,6 +27,7 @@ import LPPaver2.LinearPrune (LinearPruneResult (..), linearPrune)
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
 import Text.Printf (printf)
+-- import Debug.Trace (trace)
 
 type LPPProblem = BP.Problem Form Box
 
@@ -93,7 +94,7 @@ data LPPBPParams = LPPBPParams
 
 shouldGiveUpOnBPLPPProblem :: Rational -> LPPProblem -> Bool
 shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
-  all smallerThanPrec domainsOfSplitVars
+  all accuracyBelowThreshold domainsOfSplitVars
   where
     domainsOfSplitVars =
       [ ball
@@ -101,8 +102,10 @@ shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
           Just ball <- [Map.lookup var scope.box_.varDomains]
       ]
 
-    smallerThanPrec :: MPBall -> Bool
-    smallerThanPrec ball = diameter <= giveUpAccuracy
+    accuracyBelowThreshold :: MPBall -> Bool
+    accuracyBelowThreshold ball = 
+      -- trace (printf "Checking if box with radius %s should be given up (threshold: %s)" (show (MP.radius ball)) (show $ double giveUpAccuracy)) $
+      diameter <= giveUpAccuracy
       where
         diameter = 2 * MP.radius ball
 
