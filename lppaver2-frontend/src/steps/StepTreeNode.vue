@@ -1,11 +1,11 @@
 <script lang="ts" setup>
-import { storeToRefs } from 'pinia';
-import { computed, ref, watch } from 'vue';
-import { useStepsStore } from './stepsStore';
-import { getSubProblems, sameProblem, type Problem } from './steps';
+import { storeToRefs } from "pinia";
+import { computed, ref, watch } from "vue";
+import { useStepsStore } from "./stepsStore";
+import { getSubProblems, sameProblem, type Problem } from "./steps";
 
 const props = defineProps<{
-  problem: Problem
+  problem: Problem;
 }>();
 
 const stepsStore = useStepsStore();
@@ -17,19 +17,33 @@ const step = stepsStore.stepFromProblem(props.problem);
 const stepTruth = stepsStore.getStepTruthResult(step);
 
 const stepTruthNote =
-  stepTruth === "CertainTrue" ? " (True)" :
-    stepTruth === "CertainFalse" ? " (False)" :
-      "";
+  stepTruth === "CertainTrue"
+    ? " (True)"
+    : stepTruth === "CertainFalse"
+      ? " (False)"
+      : "";
 
-const stepCategory = step.tag === "ProgressStep" ? 
-  (step.progressPaving.undecided.length > 1 ? "Split" : "Prune") : step.tag;
+const stepCategory =
+  step.tag === "ProgressStep"
+    ? step.progressPaving.undecided.length == 0
+      ? "Decided"
+      : step.progressPaving.inner.boxes.length > 0
+        ? "Prune True"
+        : step.progressPaving.outer.boxes.length > 0
+          ? "Prune False"
+          : "Split"
+    : step.tag;
 
 const stepLabel = `${stepCategory}${stepTruthNote}`;
 
 const subProblems = getSubProblems(step);
 
-const isFocused = computed(() => sameProblem(props.problem, focusedProblem.value));
-const isZoomed = computed(() => sameProblem(props.problem, zoomedProblem.value));
+const isFocused = computed(() =>
+  sameProblem(props.problem, focusedProblem.value),
+);
+const isZoomed = computed(() =>
+  sameProblem(props.problem, zoomedProblem.value),
+);
 
 const classes = computed(() => {
   return {
@@ -60,15 +74,23 @@ const el = ref<HTMLElement | null>(null);
 watch(focusedProblem, (newVal) => {
   if (sameProblem(newVal, props.problem)) {
     // Scroll this element into view
-    el.value?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'center' });
+    el.value?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+      inline: "center",
+    });
   }
 });
-
 </script>
 
 <template>
-  <table ref="el" :class="classes" :style="`background-color: ${stepsStore.getStepColour(step)};`" @click="focusHere"
-    @dblclick="zoomHere">
+  <table
+    ref="el"
+    :class="classes"
+    :style="`background-color: ${stepsStore.getStepColour(step)};`"
+    @click="focusHere"
+    @dblclick="zoomHere"
+  >
     <tbody>
       <tr>
         <td colspan="2" class="text-left fw-bold">
@@ -76,7 +98,12 @@ watch(focusedProblem, (newVal) => {
         </td>
       </tr>
       <tr v-for="subProblem in subProblems">
-        <td class="text-center" style="width: 15px; vertical-align: top; color: midnightblue;">↳</td>
+        <td
+          class="text-center"
+          style="width: 15px; vertical-align: top; color: midnightblue"
+        >
+          ↳
+        </td>
         <td>
           <StepTreeNode :problem="subProblem" />
         </td>
