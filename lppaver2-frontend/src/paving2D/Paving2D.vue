@@ -3,11 +3,17 @@ import { computed, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import Plotly from "plotly.js-dist-min";
 
-import { getSubProblems, type Problem } from "@/steps/steps";
-import { useStepsStore } from "@/steps/stepsStore";
+import {
+  getSubProblems,
+  type BoxHash,
+  type Problem,
+  type Step,
+} from "@/steps/steps";
+import { getTruthColour, useStepsStore } from "@/steps/stepsStore";
 import type { Var } from "@/formulas/exprs";
 import { pickXY } from "@/boxes/pickVars";
 import type { Interval } from "@/formulas/evalInfo";
+import type { Kleenean } from "@/formulas/kleenean";
 
 const props = withDefaults(
   defineProps<{
@@ -52,19 +58,49 @@ function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
     return [];
   }
 
-  const step = stepsStore.stepFromProblem(problem);
+  const step: Step = stepsStore.stepFromProblem(problem);
 
   // recursively get subproblem shapes
   const subProblems = getSubProblems(step);
   const subProblemTraces: Partial<Plotly.Data>[] =
     subProblems.flatMap(getProblemTraces);
 
+  // is this a progress step with inner / outer regions?
+  const innerRegionH =
+    step.tag === "ProgressStep"
+      ? step.progressPaving.inner.boxes[0]
+      : undefined;
+  const outerRegionH =
+    step.tag === "ProgressStep"
+      ? step.progressPaving.outer.boxes[0]
+      : undefined;
+
+  // get the main step box (possibly with an excluded region)
+  // and the Kleenean truth value for that box
+  const [stepBoxH, stepTruth]: [BoxHash, Kleenean] = innerRegionH
+    ? [innerRegionH, "CertainTrue"]
+    : outerRegionH
+      ? [outerRegionH, "CertainFalse"]
+      : [problem.scope, "TrueOrFalse"];
+
   // get this problem's scope shape
-  const box = stepsStore.getBox(problem.scope);
+  const box = stepsStore.getBox(stepBoxH);
   const varDomains = box.box_.varDomains;
   const xDomain = varDomains[xVar.value];
   const yDomain = varDomains[yVar.value];
-  const { x, y } = getBoxTraceXY(xDomain, yDomain);
+  const excludedRegion = box.box_.except;
+  const excludedXDomain = excludedRegion
+    ? excludedRegion[xVar.value]
+    : undefined;
+  const excludedYDomain = excludedRegion
+    ? excludedRegion[yVar.value]
+    : undefined;
+  const { x, y } = getBoxTraceXY(
+    xDomain,
+    yDomain,
+    excludedXDomain,
+    excludedYDomain,
+  );
 
   const problemLineTrace: Partial<Plotly.Data> = {
     type: "scatter",
@@ -76,7 +112,7 @@ function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
       color: "black",
       width: 1,
     },
-    fillcolor: stepsStore.getStepColour(step),
+    fillcolor: getTruthColour(stepTruth),
     opacity: 0.5,
     showlegend: false,
     customdata: [problem.scope, problem.constraint],
@@ -89,15 +125,30 @@ function getProblemTraces(problem: Problem | null): Partial<Plotly.Data>[] {
 function getBoxTraceXY(
   xDomain: Interval<number> | undefined,
   yDomain: Interval<number> | undefined,
+  excludedXDomain: Interval<number> | undefined,
+  excludedYDomain: Interval<number> | undefined,
 ) {
   const x0 = xDomain?.l ?? 0;
   const x1 = xDomain?.u ?? 0;
   const y0 = yDomain?.l ?? 0;
   const y1 = yDomain?.u ?? 0;
-  return {
-    x: [x0, x1, x1, x0, x0],
-    y: [y0, y0, y1, y1, y0],
-  };
+
+  const x0Excl = excludedXDomain?.l ?? 0;
+  const x1Excl = excludedXDomain?.u ?? 0;
+  const y0Excl = excludedYDomain?.l ?? 0;
+  const y1Excl = excludedYDomain?.u ?? 0;
+
+  if (excludedXDomain && excludedYDomain) {
+    return {
+      x: [x0, x1, x1, x0, x0, x0Excl, x0Excl, x1Excl, x1Excl, x0Excl],
+      y: [y0, y0, y1, y1, y0, y0Excl, y1Excl, y1Excl, y0Excl, y0Excl],
+    };
+  } else {
+    return {
+      x: [x0, x1, x1, x0, x0],
+      y: [y0, y0, y1, y1, y0],
+    };
+  }
 }
 
 function getFocusedProblemOutline() {

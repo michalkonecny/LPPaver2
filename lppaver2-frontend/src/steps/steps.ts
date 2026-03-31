@@ -6,9 +6,12 @@ export type BoxHash = string
 
 // Box types
 
+export type VarDomains = Record<Var, Interval<number>>
+
 export type Box_ = {
-  varDomains: Record<Var, Interval<number>>,
-  splitOrder: Var[]
+  varDomains: VarDomains,
+  splitOrder: Var[],
+  except?: VarDomains,
 }
 
 export type Box = {
