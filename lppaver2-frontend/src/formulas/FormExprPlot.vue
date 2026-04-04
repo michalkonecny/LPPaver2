@@ -251,23 +251,25 @@ const epxrValueBounds = computed<Interval<number[]> | undefined>(() => {
 });
 
 const customdata = computed(() =>
-  fpValues.value &&
-  typeof fpValues.value[0] === "number" &&
-  epxrValueBounds.value
-    ? (_.zip(
-        fpValues.value as number[],
-        epxrValueBounds.value.l,
-        epxrValueBounds.value.u,
-      ) as number[][])
-    : undefined,
+  fpValues.value && zIsBool.value
+    ? (fpValues.value?.map((k) => [`${k === 'CertainTrue'}`]))
+    : fpValues.value && epxrValueBounds.value
+      ? (_.zip(
+          fpValues.value as number[],
+          epxrValueBounds.value.l,
+          epxrValueBounds.value.u,
+        ) as number[][])
+      : undefined,
 );
 
 const hovertemplate = computed(
   () =>
     `${xVar.value} = %{x:.3f}<br>${yVar.value} = %{y:.3f}` +
-    (customdata.value
-      ? "<br>val ⩬ %{customdata[0]:.3f}<br>val ∈ [%{customdata[1]:.3f}, %{customdata[2]:.3f}]"
-      : ""),
+    (!customdata.value
+      ? ""
+      : zIsBool.value
+        ? "<br>val ⩬ %{customdata[0]}"
+        : "<br>val ⩬ %{customdata[0]:.3f}<br>val ∈ [%{customdata[1]:.3f}, %{customdata[2]:.3f}]"),
 );
 
 const boolHeight = computed(() => 1);
