@@ -45,7 +45,13 @@ problems eps =
       ( "simpleAnd",
         Problem
           { scope = mkBox [("x", (0.0, 2.0)), ("y", (0.0, 2.0))],
-            constraint = (y <= exprLit 1.0) && (exprLit 1.0 <= x) && formTrue
+            constraint = (y <= exprLit 1.25) && (exprLit 1.25 <= x)
+          }
+      ),
+      ( "simpleAndWithSine",
+        Problem
+          { scope = mkBox [("x", (0.0, 2.0)), ("y", (0.0, 2.0))],
+            constraint = (y <= exprLit 1.25) && (exprLit 1.25 <= x) && (y <= sin (10.0 * x))
           }
       ),
       ( "circleEps",
