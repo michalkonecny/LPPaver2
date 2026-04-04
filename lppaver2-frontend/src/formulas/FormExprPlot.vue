@@ -441,5 +441,5 @@ onMounted(() => {
 
 <template>
   <!-- TODO: make plot resize with grid cell resize -->
-  <div ref="plotDiv" class="w-100" style="height: 90%"></div>
+  <div ref="plotDiv" class="w-100" style="height: calc(100% - 25px)"></div>
 </template>
