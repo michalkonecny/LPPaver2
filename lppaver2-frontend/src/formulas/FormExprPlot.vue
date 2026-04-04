@@ -159,7 +159,7 @@ const expr = computed(() => {
   return useStepsStore().getExpr(props.formOrExprHash.exprHash);
 });
 
-const zIsBool = computed(() => form.value !== undefined)
+const zIsBool = computed(() => form.value !== undefined);
 
 type Trace = Partial<Plotly.Data> & { intensity: any }; // intensity is missing in the Plotly type defs
 
@@ -270,7 +270,7 @@ const hovertemplate = computed(
       : ""),
 );
 
-const boolHeight = computed(() => 1)
+const boolHeight = computed(() => 1);
 
 function getFPValueTrace(): Trace[] {
   const triangulation = denseTriangulation.value;
@@ -285,7 +285,9 @@ function getFPValueTrace(): Trace[] {
 
   if (f) {
     const kleeneans = fpValues.value as Kleenean[];
-    z = kleeneans.map((k) => kleeneanSwitch(k, boolHeight.value, 0, -boolHeight.value));
+    z = kleeneans.map((k) =>
+      kleeneanSwitch(k, boolHeight.value, 0, -boolHeight.value),
+    );
     const zHasTrue = z.some((v) => (v as number) > 0);
     const zHas0 = z.some((v) => (v as number) === 0);
     const zHasFalse = z.some((v) => (v as number) < 0);
@@ -333,6 +335,7 @@ function getFPValueTrace(): Trace[] {
   return [
     {
       type: "mesh3d",
+      name: "",
       ...triangulation,
       z,
       intensity: z,
@@ -361,6 +364,7 @@ function getBoundsTraces(): Trace[] {
   function mkBoundTrace(z: Plotly.Datum[]): Trace {
     return {
       type: "mesh3d",
+      name: "",
       z,
       colorscale,
       intensity: Array(z.length).fill(0),
@@ -413,7 +417,9 @@ const layout = computed<Partial<Plotly.Layout>>(() => ({
     yaxis: { ...getAxisLayout(yVar.value) },
     zaxis: {
       ...getAxisLayout("value"),
-      tickvals: zIsBool.value ? [-boolHeight.value, 0, boolHeight.value] : undefined,
+      tickvals: zIsBool.value
+        ? [-boolHeight.value, 0, boolHeight.value]
+        : undefined,
       ticktext: zIsBool.value ? ["false", "?", "true"] : undefined,
     },
   },
