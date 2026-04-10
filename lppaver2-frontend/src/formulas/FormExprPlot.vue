@@ -85,7 +85,7 @@ const yxRelativeRatio = computed<number>(() => {
   return yxRatio / yxRootRatio.value;
 });
 
-const numberOfSamplesPerVar = 99;
+const numberOfSamplesPerVar = ref(49);
 
 const xVarDomain = computed(() => {
   if (!props.box) {
@@ -122,11 +122,11 @@ const denseTriangulation = computed<Triangulation2D | undefined>(() => {
 
   const xDomainAndN: DomainAndN = {
     domain: xVarDomain.value,
-    n: numberOfSamplesPerVar,
+    n: numberOfSamplesPerVar.value,
   };
   const yDomainAndN: DomainAndN = {
     domain: yVarDomain.value,
-    n: numberOfSamplesPerVar,
+    n: numberOfSamplesPerVar.value,
   };
 
   return getHexTriangulation(xDomainAndN, yDomainAndN);
@@ -252,7 +252,7 @@ const epxrValueBounds = computed<Interval<number[]> | undefined>(() => {
 
 const customdata = computed(() =>
   fpValues.value && zIsBool.value
-    ? (fpValues.value?.map((k) => [`${k === 'CertainTrue'}`]))
+    ? fpValues.value?.map((k) => [`${k === "CertainTrue"}`])
     : fpValues.value && epxrValueBounds.value
       ? (_.zip(
           fpValues.value as number[],
@@ -449,5 +449,18 @@ onMounted(() => {
 
 <template>
   <!-- TODO: make plot resize with grid cell resize -->
-  <div ref="plotDiv" class="w-100" style="height: calc(100% - 25px)"></div>
+  <div ref="plotDiv" class="w-100" style="height: calc(100% - 35px)"></div>
+  <div class="d-flex align-items-center gap-2 mt-2">
+    <!-- triangulation resolution slider -->
+    <label for="triangResSlider" class="text-nowrap">Triangulation Resolution:</label>
+    <input
+      id="triangResSlider"
+      class="form-range form-control"
+      type="range"
+      min="11"
+      max="199"
+      step="2"
+      v-model="numberOfSamplesPerVar"
+    />
+  </div>
 </template>
