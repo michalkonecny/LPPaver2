@@ -101,21 +101,11 @@ const yVarDomain = computed(() => {
   return props.box.box_.varDomains[yVar.value];
 });
 
-const domainWidth = computed(() => {
-  if (!xVarDomain.value || !yVarDomain.value) {
-    return 0;
-  }
-  const xWidth = xVarDomain.value.u - xVarDomain.value.l;
-  const yWidth = yVarDomain.value.u - yVarDomain.value.l;
-  return Math.max(xWidth, yWidth);
-});
-
 const denseTriangulation = computed<Triangulation2D | undefined>(() => {
   if (!props.box) {
     return undefined;
   }
 
-  const varDomains = props.box.box_.varDomains;
   if (!xVarDomain.value || !yVarDomain.value) {
     return undefined;
   }
