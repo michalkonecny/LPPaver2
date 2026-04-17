@@ -60,7 +60,7 @@ function onSubFormExprClicked(data: FormOrExprHash) {
     <GridItem key="focEPlot" i="focEPlot" :x="focEPlotLayout.x" :y="focEPlotLayout.y" :w="focEPlotLayout.w"
       :h="focEPlotLayout.h" :isDraggable="false">
       <div class="border w-100 h-100" style="overflow-y: auto;">
-        <FormExprPlot v-if="focusedProblemSubFormExpr" :formOrExprHash="focusedProblemSubFormExpr"
+        <FormExprPlot v-if="focusedProblemSubFormExpr && focusedExprValues" :formOrExprHash="focusedProblemSubFormExpr"
           :box="focusedScopeBox ?? undefined" :exprValues="focusedExprValues" />
       </div>
     </GridItem>
