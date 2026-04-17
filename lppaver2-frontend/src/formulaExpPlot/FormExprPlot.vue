@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Plotly, { type ColorScale } from "plotly.js-dist-min";
+import Plotly from "plotly.js-dist-min";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { type FormOrExprHash } from "../formulas/forms";
 import { type Box } from "@/steps/steps";
@@ -16,8 +16,6 @@ import { evalFPExpr, evalFPForm } from "../formulas/evalFP";
 import { kleeneanSwitch, type Kleenean } from "../formulas/kleenean";
 import {
   evalExprOnTriangulation,
-  exprValueIsAffineForm,
-  exprValueIsInterval,
   intervalWidth,
   type ExprValue,
   type Interval,
@@ -226,7 +224,7 @@ function getFPValueTrace(): Trace[] {
     return [];
   }
 
-  let z: Plotly.Datum[] = [];
+  let z: number[] = [];
   let colorscale: Plotly.ColorScale = [];
 
   if (f) {
@@ -234,41 +232,8 @@ function getFPValueTrace(): Trace[] {
     z = kleeneans.map((k) =>
       kleeneanSwitch(k, boolHeight.value, 0, -boolHeight.value),
     );
-    const zHasTrue = z.some((v) => (v as number) > 0);
-    const zHas0 = z.some((v) => (v as number) === 0);
-    const zHasFalse = z.some((v) => (v as number) < 0);
-    if (zHasTrue && zHasFalse) {
-      colorscale = [
-        [0, getTruthColour("CertainFalse")],
-        [0.5, getTruthColour("TrueOrFalse")],
-        [1, getTruthColour("CertainTrue")],
-      ];
-    } else if (zHasTrue && zHas0) {
-      colorscale = [
-        [0, getTruthColour("TrueOrFalse")],
-        [1, getTruthColour("CertainTrue")],
-      ];
-    } else if (zHasFalse && zHas0) {
-      colorscale = [
-        [0, getTruthColour("CertainFalse")],
-        [1, getTruthColour("TrueOrFalse")],
-      ];
-    } else if (zHasTrue) {
-      colorscale = [
-        [0, getTruthColour("CertainTrue")],
-        [1, getTruthColour("CertainTrue")],
-      ];
-    } else if (zHasFalse) {
-      colorscale = [
-        [0, getTruthColour("CertainFalse")],
-        [1, getTruthColour("CertainFalse")],
-      ];
-    } else {
-      colorscale = [
-        [0, getTruthColour("TrueOrFalse")],
-        [1, getTruthColour("TrueOrFalse")],
-      ];
-    }
+
+    colorscale = getKleeneanColourscale(z, 0);
   }
   if (e) {
     z = fpValues.value as number[];
@@ -284,6 +249,8 @@ function getFPValueTrace(): Trace[] {
       name: "",
       ...triangulation,
       z,
+      zmin: -boolHeight.value,
+      zmax: boolHeight.value,
       intensity: z,
       colorscale,
       showlegend: false,
@@ -294,6 +261,52 @@ function getFPValueTrace(): Trace[] {
   ];
 }
 
+function getKleeneanColourscale(
+  z: number[],
+  middleZ: number,
+): Plotly.ColorScale {
+  const minZ = Math.min(...z);
+  const maxZ = Math.max(...z);
+  if (minZ > middleZ) {
+    // all values are CertainTrue
+    return [
+      [0, getTruthColour("CertainTrue")],
+      [1, getTruthColour("CertainTrue")],
+    ];
+  } else if (maxZ < middleZ) {
+    // all values are CertainFalse
+    return [
+      [0, getTruthColour("CertainFalse")],
+      [1, getTruthColour("CertainFalse")],
+    ];
+  } else if (minZ === middleZ && maxZ === middleZ) {
+    // all values are TrueOrFalse
+    return [
+      [0, getTruthColour("TrueOrFalse")],
+      [1, getTruthColour("TrueOrFalse")],
+    ];
+  } else if (minZ >= middleZ) {
+    // all values are CertainTrue or TrueOrFalse, and both are present
+    return [
+      [0, getTruthColour("TrueOrFalse")],
+      [1, getTruthColour("CertainTrue")],
+    ];
+  } else if (maxZ <= middleZ) {
+    // all values are CertainFalse or TrueOrFalse, and both are present
+    return [
+      [0, getTruthColour("CertainFalse")],
+      [1, getTruthColour("TrueOrFalse")],
+    ];
+  } else {
+    // values of all three types are present
+    return [
+      [0, getTruthColour("CertainFalse")],
+      [0.5, getTruthColour("TrueOrFalse")],
+      [1, getTruthColour("CertainTrue")],
+    ];
+  }
+}
+
 function getBoundsTraces(): Trace[] {
   const triangulation = denseTriangulation.value;
   const e = expr.value;
@@ -302,7 +315,7 @@ function getBoundsTraces(): Trace[] {
     return [];
   }
 
-  const colorscale: ColorScale = [
+  const colorscale: Plotly.ColorScale = [
     [0, "rgb(200,100,100)"],
     [1, "rgb(200,100,100)"],
   ];
