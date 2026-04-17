@@ -150,7 +150,7 @@ const expr = computed(() => {
 
 const zIsBool = computed(() => form.value !== undefined);
 
-type Trace = Partial<Plotly.Data> & { intensity: any }; // intensity is missing in the Plotly type defs
+type Trace = Partial<Plotly.Data> & { intensity?: Plotly.Datum[] }; // intensity is missing in the Plotly type defs
 
 const fpValues = computed(() => {
   const f = form.value;
@@ -214,7 +214,7 @@ const hovertemplate = computed(
 
 const boolHeight = computed(() => 1);
 
-function getFPValueTrace(): Trace[] {
+function getFPValueTraces(): Trace[] {
   const triangulation = denseTriangulation.value;
   const f = form.value;
   const e = expr.value;
@@ -247,8 +247,6 @@ function getFPValueTrace(): Trace[] {
       name: "",
       ...triangulation,
       z,
-      zmin: -boolHeight.value,
-      zmax: boolHeight.value,
       intensity: z,
       colorscale,
       showlegend: false,
@@ -260,47 +258,53 @@ function getFPValueTrace(): Trace[] {
 }
 
 function getKleeneanColourscale(
-  z: number[],
-  middleZ: number,
+  intensity: number[],
+  middleIntensity: number,
 ): Plotly.ColorScale {
-  const minZ = Math.min(...z);
-  const maxZ = Math.max(...z);
-  if (minZ > middleZ) {
+  const minIntensity = Math.min(...intensity);
+  const maxIntensity = Math.max(...intensity);
+  const trueColour = getTruthColour("CertainTrue");
+  const falseColour = getTruthColour("CertainFalse");
+  const unknownColour = getTruthColour("TrueOrFalse");
+  if (minIntensity > middleIntensity) {
     // all values are CertainTrue
     return [
-      [0, getTruthColour("CertainTrue")],
-      [1, getTruthColour("CertainTrue")],
+      [0, trueColour],
+      [1, trueColour],
     ];
-  } else if (maxZ < middleZ) {
+  } else if (maxIntensity < middleIntensity) {
     // all values are CertainFalse
     return [
-      [0, getTruthColour("CertainFalse")],
-      [1, getTruthColour("CertainFalse")],
+      [0, falseColour],
+      [1, falseColour],
     ];
-  } else if (minZ === middleZ && maxZ === middleZ) {
+  } else if (
+    minIntensity === middleIntensity &&
+    maxIntensity === middleIntensity
+  ) {
     // all values are TrueOrFalse
     return [
-      [0, getTruthColour("TrueOrFalse")],
-      [1, getTruthColour("TrueOrFalse")],
+      [0, unknownColour],
+      [1, unknownColour],
     ];
-  } else if (minZ >= middleZ) {
+  } else if (minIntensity >= middleIntensity) {
     // all values are CertainTrue or TrueOrFalse, and both are present
     return [
-      [0, getTruthColour("TrueOrFalse")],
-      [1, getTruthColour("CertainTrue")],
+      [0, unknownColour],
+      [1, trueColour],
     ];
-  } else if (maxZ <= middleZ) {
+  } else if (maxIntensity <= middleIntensity) {
     // all values are CertainFalse or TrueOrFalse, and both are present
     return [
-      [0, getTruthColour("CertainFalse")],
-      [1, getTruthColour("TrueOrFalse")],
+      [0, falseColour],
+      [1, unknownColour],
     ];
   } else {
     // values of all three types are present
     return [
-      [0, getTruthColour("CertainFalse")],
-      [0.5, getTruthColour("TrueOrFalse")],
-      [1, getTruthColour("CertainTrue")],
+      [0, falseColour],
+      [0.5, unknownColour],
+      [1, trueColour],
     ];
   }
 }
@@ -339,8 +343,8 @@ function getBoundsTraces(): Trace[] {
   return [lBoundTrace, uBoundTrace];
 }
 
-const plotData = computed<Trace[]>(() => {
-  const fpValueTraces = getFPValueTrace();
+const traces = computed<Trace[]>(() => {
+  const fpValueTraces = getFPValueTraces();
 
   const boundsTraces: Trace[] = getBoundsTraces();
 
@@ -388,7 +392,7 @@ function renderPlot() {
     return;
   }
 
-  Plotly.react(plotDiv.value, plotData.value, layout.value, {
+  Plotly.react(plotDiv.value, traces.value, layout.value, {
     displayModeBar: true,
     responsive: true,
     scrollZoom: true,
