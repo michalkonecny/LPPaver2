@@ -24,7 +24,7 @@ import {
 const props = defineProps<{
   formOrExprHash: FormOrExprHash | undefined;
   box: Box | undefined;
-  exprValues?: Record<string, ExprValue>;
+  exprValues: Record<string, ExprValue>;
 }>();
 
 const plotDiv = ref<HTMLDivElement | null>(null);
@@ -167,13 +167,11 @@ const fpValues = computed(() => {
 
 const exprValue = computed<ExprValue | undefined>(() => {
   if (!expr.value) return undefined;
-  if (!props.exprValues) return undefined;
 
   return props.exprValues[expr.value.hash];
 });
 
 const epxrValueBounds = computed<Interval<number[]> | undefined>(() => {
-  if (!props.exprValues) return undefined;
   // work out which var expr corresponds to x and y
   const varExprs = getExprVarExprs(expr.value!);
   const xExprHash = varExprs[xVar.value]?.hash;
