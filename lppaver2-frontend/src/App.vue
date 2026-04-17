@@ -7,7 +7,7 @@ import { storeToRefs } from 'pinia';
 import { GridLayout, GridItem, type LayoutItem } from 'grid-layout-plus'
 import ProblemView from './ProblemView.vue';
 import { type FormOrExprHash } from './formulas/forms';
-import FormExprPlot from './formulas/FormExprPlot.vue';
+import FormExprPlot from './formulaExpPlot/FormExprPlot.vue';
 
 const stepStore = useStepsStore()
 const { focusedProblem, focusedProblemSubFormExpr, focusedExprValues } = storeToRefs(stepStore)

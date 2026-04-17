@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import Plotly, { type ColorScale } from "plotly.js-dist-min";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { type FormOrExprHash } from "./forms";
+import { type FormOrExprHash } from "../formulas/forms";
 import { type Box } from "@/steps/steps";
-import { getExprVarExprs, type Var } from "./exprs";
+import { getExprVarExprs, type Var } from "../formulas/exprs";
 import { pickXY } from "@/boxes/pickVars";
 import _ from "lodash";
 import { getTruthColour, useStepsStore } from "@/steps/stepsStore";
@@ -11,16 +11,17 @@ import {
   getHexTriangulation,
   type DomainAndN,
   type Triangulation2D,
-} from "./mesh";
-import { evalFPExpr, evalFPForm } from "./evalFP";
-import { kleeneanSwitch, type Kleenean } from "./kleenean";
+} from "../formulas/mesh";
+import { evalFPExpr, evalFPForm } from "../formulas/evalFP";
+import { kleeneanSwitch, type Kleenean } from "../formulas/kleenean";
 import {
+  evalExprOnTriangulation,
   exprValueIsAffineForm,
   exprValueIsInterval,
   intervalWidth,
   type ExprValue,
   type Interval,
-} from "./evalInfo";
+} from "../formulas/evalInfo";
 
 const props = defineProps<{
   formOrExprHash: FormOrExprHash | undefined;
@@ -174,70 +175,23 @@ const exprValue = computed<ExprValue | undefined>(() => {
 });
 
 const epxrValueBounds = computed<Interval<number[]> | undefined>(() => {
-  const eValue = exprValue.value;
-  if (!eValue) return undefined;
-  const triang = denseTriangulation.value;
-  if (!triang) return undefined;
+  if (!props.exprValues) return undefined;
+  // work out which var expr corresponds to x and y
+  const varExprs = getExprVarExprs(expr.value!);
+  const xExprHash = varExprs[xVar.value]?.hash;
+  const yExprHash = varExprs[yVar.value]?.hash;
+  // lookup the affine error term IDs corresponding to x and y
+  const xExprValue = xExprHash ? props.exprValues[xExprHash] : undefined;
+  const yExprValue = yExprHash ? props.exprValues[yExprHash] : undefined;
 
-  if (exprValueIsInterval(eValue)) {
-    const l: number[] = Array(triang.x.length).fill(eValue.l);
-    const u: number[] = Array(triang.x.length).fill(eValue.u);
-    return { l, u };
-  }
-
-  if (exprValueIsAffineForm(eValue)) {
-    if (!props.exprValues) return undefined;
-    // work out which var expr corresponds to x and y
-    const varExprs = getExprVarExprs(expr.value!);
-    const xExprHash = varExprs[xVar.value]?.hash;
-    const yExprHash = varExprs[yVar.value]?.hash;
-    // lookup the affine error term IDs corresponding to x and y
-    const xExprValue = xExprHash ? props.exprValues[xExprHash] : undefined;
-    const yExprValue = yExprHash ? props.exprValues[yExprHash] : undefined;
-    // If expr value is an affine form, also the value for x and y will be affine forms.
-    // The affine form for a variable will have a single error term, whose key is the variable's ID.
-    const xErrId =
-      xExprValue && exprValueIsAffineForm(xExprValue)
-        ? _.keys(xExprValue.errTerms)[0]
-        : undefined;
-    const yErrId =
-      yExprValue && exprValueIsAffineForm(yExprValue)
-        ? _.keys(yExprValue.errTerms)[0]
-        : undefined;
-
-    const xErrCoeff: number = xErrId ? (eValue.errTerms[xErrId] ?? 0) : 0;
-    const yErrCoeff: number = yErrId ? (eValue.errTerms[yErrId] ?? 0) : 0;
-    const otherErrCoeffs: number[] = Object.entries(eValue.errTerms)
-      .filter(([errId, _]) => errId !== xErrId && errId !== yErrId)
-      .map(([_, coeff]) => coeff);
-    const otherErrSum = _.sum(otherErrCoeffs.map(Math.abs));
-
-    function xToUnit(x?: number): number {
-      const xDom = xVarDomain.value;
-      if (!xDom) return 0;
-      const c = (xDom.l + xDom.u) / 2;
-      return (2 * ((x ?? c) - c)) / (xDom.u - xDom.l);
-    }
-
-    function yToUnit(y?: number): number {
-      const yDom = yVarDomain.value;
-      if (!yDom) return 0;
-      const c = (yDom.l + yDom.u) / 2;
-      return (2 * ((y ?? c) - c)) / (yDom.u - yDom.l);
-    }
-
-    const c = triang.x.map(
-      (_, i) =>
-        eValue.center +
-        xErrCoeff * xToUnit(triang.x[i]) +
-        yErrCoeff * yToUnit(triang.y[i]),
-    );
-    const l = c.map((v) => v - otherErrSum);
-    const u = c.map((v) => v + otherErrSum);
-    return { l, u };
-  }
-
-  return undefined;
+  return evalExprOnTriangulation(
+    exprValue.value,
+    xExprValue,
+    yExprValue,
+    xVarDomain.value,
+    yVarDomain.value,
+    denseTriangulation.value,
+  );
 });
 
 const customdata = computed(() =>
@@ -437,8 +391,6 @@ onUnmounted(() => {
     Plotly.purge(plotDiv.value);
   }
 });
-
-
 </script>
 
 <template>
@@ -446,7 +398,9 @@ onUnmounted(() => {
   <div ref="plotDiv" class="w-100" style="height: calc(100% - 35px)"></div>
   <div class="d-flex align-items-center gap-2 mt-2">
     <!-- triangulation resolution slider -->
-    <label for="triangResSlider" class="text-nowrap">Triangulation Resolution:</label>
+    <label for="triangResSlider" class="text-nowrap">
+      Triangulation Resolution:
+    </label>
     <input
       id="triangResSlider"
       class="form-range form-control"
