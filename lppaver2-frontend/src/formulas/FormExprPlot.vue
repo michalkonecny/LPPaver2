@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Plotly, { type ColorScale } from "plotly.js-dist-min";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { type FormOrExprHash } from "./forms";
 import { type Box } from "@/steps/steps";
 import { getExprVarExprs, type Var } from "./exprs";
@@ -430,11 +430,15 @@ function renderPlot() {
   });
 }
 
-onMounted(() => {
-  watch([plotDiv, denseTriangulation, form, expr], renderPlot, {
-    immediate: true,
-  });
+watch([plotDiv, denseTriangulation, form, expr], renderPlot);
+onMounted(renderPlot);
+onUnmounted(() => {
+  if (plotDiv.value) {
+    Plotly.purge(plotDiv.value);
+  }
 });
+
+
 </script>
 
 <template>

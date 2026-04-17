@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import Plotly from "plotly.js-dist-min";
 
@@ -228,12 +228,16 @@ function renderPlot() {
   }
 }
 
-onMounted(() => {
-  watch(
-    [plotDiv, () => props.topProblem, xVar, yVar, focusedProblem],
-    renderPlot,
-    { immediate: true },
-  );
+watch(
+  [plotDiv, () => props.topProblem, xVar, yVar, focusedProblem],
+  renderPlot,
+);
+
+onMounted(renderPlot);
+onUnmounted(() => {
+  if (plotDiv.value) {
+    Plotly.purge(plotDiv.value);
+  }
 });
 </script>
 
