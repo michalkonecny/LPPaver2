@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import Plotly from "plotly.js-dist-min";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { type FormOrExprHash } from "../formulas/forms";
+import {
+  decomposeBinaryComp,
+  type Form,
+  type FormOrExprHash,
+} from "../formulas/forms";
 import { type Box } from "@/steps/steps";
-import { getExprVarExprs, type Var } from "../formulas/exprs";
+import { getExprVarExprs, type Expr, type Var } from "../formulas/exprs";
 import { pickXY } from "@/boxes/pickVars";
 import _ from "lodash";
 import { getTruthColour, useStepsStore } from "@/steps/stepsStore";
@@ -152,17 +156,22 @@ const zIsBool = computed(() => form.value !== undefined);
 
 type Trace = Partial<Plotly.Data> & { intensity?: Plotly.Datum[] }; // intensity is missing in the Plotly type defs
 
-const fpValues = computed(() => {
-  const f = form.value;
-  const e = expr.value;
+function getFPValuesE(e: Expr) {
+  return evalEnvs.value.map((env) => evalFPExpr(e, env));
+}
 
-  if (f) {
-    return evalEnvs.value.map((env) => evalFPForm(f, env));
+function getFPValuesF(f: Form) {
+  return evalEnvs.value.map((env) => evalFPForm(f, env));
+}
+
+const fpValues = computed(() => {
+  if (form.value) {
+    return getFPValuesF(form.value);
+  } else if (expr.value) {
+    return getFPValuesE(expr.value);
+  } else {
+    return undefined;
   }
-  if (e) {
-    return evalEnvs.value.map((env) => evalFPExpr(e, env));
-  }
-  return undefined;
 });
 
 const exprValue = computed<ExprValue | undefined>(() => {
@@ -214,10 +223,32 @@ const hovertemplate = computed(
 
 const boolHeight = computed(() => 1);
 
+function makeFPValueTrace(
+  triangulation: Triangulation2D,
+  z: number[],
+  intensity: number[],
+  colorscale: Plotly.ColorScale,
+): Trace {
+  return {
+    type: "mesh3d",
+    name: "",
+    ...triangulation,
+    z,
+    intensity,
+    colorscale,
+    showlegend: false,
+    showscale: false,
+    customdata: customdata.value, // [fpValue, lowerBound, upperBound] for each point, if available
+    hovertemplate: hovertemplate.value,
+  };
+}
+
 function getFPValueTraces(): Trace[] {
   const triangulation = denseTriangulation.value;
   const f = form.value;
   const e = expr.value;
+  const { e1, e2, comp } = f ? decomposeBinaryComp(f) : {};
+
   if ((!f && !e) || (e && f) || !triangulation) {
     return [];
   }
@@ -226,6 +257,20 @@ function getFPValueTraces(): Trace[] {
   let colorscale: Plotly.ColorScale = [];
 
   if (f) {
+    if (comp && e1 && e2) {
+      // return getFPValueCompTraces(e1, e2, comp);
+      // const e1Values = evalEnvs.value.map((env) => evalFPExpr(e1, env)) as number[];
+      // const e2Values = evalEnvs.value.map((env) => evalFPExpr(e2, env)) as number[];
+      // if (comp === "<") {
+      //   z = e1Values.map((v, i) => v < e2Values[i] ? boolHeight.value : -boolHeight.value);
+      //   colorscale = getKleeneanColourscale(z, 0);
+      // } else if (comp === "<=") {
+      //   z = e1Values.map((v, i) => v <= e2Values[i] ? boolHeight.value : -boolHeight.value);
+      //   colorscale = getKleeneanColourscale(z, 0);
+      // } else {
+      //   // for other comparisons, just show the value of the expression without colouring
+    }
+
     const kleeneans = fpValues.value as Kleenean[];
     z = kleeneans.map((k) =>
       kleeneanSwitch(k, boolHeight.value, 0, -boolHeight.value),
@@ -241,21 +286,9 @@ function getFPValueTraces(): Trace[] {
     ];
   }
 
-  return [
-    {
-      type: "mesh3d",
-      name: "",
-      ...triangulation,
-      z,
-      intensity: z,
-      colorscale,
-      showlegend: false,
-      showscale: false,
-      customdata: customdata.value, // [fpValue, lowerBound, upperBound] for each point, if available
-      hovertemplate: hovertemplate.value,
-    },
-  ];
+  return [makeFPValueTrace(triangulation, z, z, colorscale)];
 }
+
 
 function getKleeneanColourscale(
   intensity: number[],
@@ -301,9 +334,11 @@ function getKleeneanColourscale(
     ];
   } else {
     // values of all three types are present
+    const unknownRatio =
+      (middleIntensity - minIntensity) / (maxIntensity - minIntensity);
     return [
       [0, falseColour],
-      [0.5, unknownColour],
+      [unknownRatio, unknownColour],
       [1, trueColour],
     ];
   }
