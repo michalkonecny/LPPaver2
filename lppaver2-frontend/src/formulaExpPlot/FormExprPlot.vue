@@ -24,6 +24,7 @@ import {
   type ExprValue,
   type Interval,
 } from "../formulas/evalInfo";
+import { getKleeneanColourscale } from "./kleeneanColourscale";
 
 const props = defineProps<{
   formOrExprHash: FormOrExprHash | undefined;
@@ -251,7 +252,7 @@ function makeFPValueTrace(
   };
 }
 
-function getFPValueTraces(): Trace[] {
+const fpValueTraces = computed<Trace[]>(() => {
   const triangulation = denseTriangulation.value;
   const f = form.value;
   const e = expr.value;
@@ -308,63 +309,9 @@ function getFPValueTraces(): Trace[] {
   }
 
   return [makeFPValueTrace(triangulation, z, z, colorscale)];
-}
+});
 
-function getKleeneanColourscale(
-  intensity: number[],
-  middleIntensity: number,
-): Plotly.ColorScale {
-  const minIntensity = Math.min(...intensity);
-  const maxIntensity = Math.max(...intensity);
-  const trueColour = getTruthColour("CertainTrue");
-  const falseColour = getTruthColour("CertainFalse");
-  const unknownColour = getTruthColour("TrueOrFalse");
-  if (minIntensity > middleIntensity) {
-    // all values are CertainTrue
-    return [
-      [0, trueColour],
-      [1, trueColour],
-    ];
-  } else if (maxIntensity < middleIntensity) {
-    // all values are CertainFalse
-    return [
-      [0, falseColour],
-      [1, falseColour],
-    ];
-  } else if (
-    minIntensity === middleIntensity &&
-    maxIntensity === middleIntensity
-  ) {
-    // all values are TrueOrFalse
-    return [
-      [0, unknownColour],
-      [1, unknownColour],
-    ];
-  } else if (minIntensity >= middleIntensity) {
-    // all values are CertainTrue or TrueOrFalse, and both are present
-    return [
-      [0, unknownColour],
-      [1, trueColour],
-    ];
-  } else if (maxIntensity <= middleIntensity) {
-    // all values are CertainFalse or TrueOrFalse, and both are present
-    return [
-      [0, falseColour],
-      [1, unknownColour],
-    ];
-  } else {
-    // values of all three types are present
-    const unknownRatio =
-      (middleIntensity - minIntensity) / (maxIntensity - minIntensity);
-    return [
-      [0, falseColour],
-      [unknownRatio, unknownColour],
-      [1, trueColour],
-    ];
-  }
-}
-
-function getBoundsTraces(): Trace[] {
+const boundsTraces = computed<Trace[]>(() => {
   const triangulation = denseTriangulation.value;
   const e = expr.value;
   const eValue = exprValue.value;
@@ -396,14 +343,41 @@ function getBoundsTraces(): Trace[] {
   const lBoundTrace: Trace = mkBoundTrace(l);
   const uBoundTrace: Trace = mkBoundTrace(u);
   return [lBoundTrace, uBoundTrace];
-}
+});
+
+const showExpValues = ref(true);
+const showExpBounds = ref(true);
+
+const showValues = computed({
+  get() {
+    return fpValueTraces.value.length > 0 ? showExpValues.value : false;
+  },
+  set(val: boolean) {
+    if (fpValueTraces.value.length > 0) {
+      showExpValues.value = val;
+    }
+  },
+});
+const showBounds = computed({
+  get() {
+    return boundsTraces.value.length > 0 ? showExpBounds.value : false;
+  },
+  set(val: boolean) {
+    if (boundsTraces.value.length > 0) {
+      showExpBounds.value = val;
+    }
+  },
+});
 
 const traces = computed<Trace[]>(() => {
-  const fpValueTraces = getFPValueTraces();
-
-  const boundsTraces: Trace[] = getBoundsTraces();
-
-  return [...fpValueTraces, ...boundsTraces];
+  const result: Trace[] = [];
+  if (showValues.value) {
+    result.push(...fpValueTraces.value);
+  }
+  if (showBounds.value) {
+    result.push(...boundsTraces.value);
+  }
+  return result;
 });
 
 function getAxisLayout(text: string): Partial<Plotly.LayoutAxis> {
@@ -454,7 +428,7 @@ function renderPlot() {
   });
 }
 
-watch([plotDiv, denseTriangulation, form, expr], renderPlot);
+watch([plotDiv, traces, layout], renderPlot);
 onMounted(renderPlot);
 onUnmounted(() => {
   if (plotDiv.value) {
@@ -467,6 +441,34 @@ onUnmounted(() => {
   <!-- TODO: make plot resize with grid cell resize -->
   <div ref="plotDiv" class="w-100" style="height: calc(100% - 35px)"></div>
   <div class="d-flex align-items-center gap-2 mt-2">
+    <!-- values toggle -->
+    <label class="form-check-label text-nowrap" for="valuesToggle"
+      >Values:</label
+    >
+    <div class="form-check w-auto">
+      <input
+        :disabled="fpValueTraces.length === 0"
+        class="form-check-input"
+        type="checkbox"
+        id="valuesToggle"
+        v-model="showValues"
+      />
+    </div>
+
+    <!-- bounds toggle -->
+    <label class="form-check-label text-nowrap" for="boundsToggle"
+      >Bounds:</label
+    >
+    <div class="form-check w-auto">
+      <input
+        :disabled="boundsTraces.length === 0"
+        class="form-check-input"
+        type="checkbox"
+        id="boundsToggle"
+        v-model="showBounds"
+      />
+    </div>
+
     <!-- triangulation resolution slider -->
     <label for="triangResSlider" class="text-nowrap">
       Triangulation Resolution:
