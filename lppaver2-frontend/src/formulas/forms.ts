@@ -74,11 +74,15 @@ export const binaryConnSymbolMap: Record<BinaryConn, string> = {
   ConnImpl: "→",
 };
 
-export function decomposeBinaryComp(form: Form): {
-  e1?: Expr;
-  e2?: Expr;
-  comp?: BinaryComp;
-} {
+export type Comparison = {
+  comp: BinaryComp;
+  e1: Expr;
+  e2: Expr;
+};
+
+export function decomposeBinaryComp(
+  form: Form,
+): Comparison | { comp?: never; e1?: never; e2?: never } {
   if (form.f.tag === "FormComp") {
     return form.f;
   }

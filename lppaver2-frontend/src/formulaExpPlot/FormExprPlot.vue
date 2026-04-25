@@ -152,7 +152,15 @@ const expr = computed(() => {
   return useStepsStore().getExpr(props.formOrExprHash.exprHash);
 });
 
-const zIsBool = computed(() => form.value !== undefined);
+const comparison = computed(() =>
+  form.value ? decomposeBinaryComp(form.value) : {},
+);
+
+const zIsBool = computed(
+  // z is boolean if we are plotting a form and it is not a comparison form
+  // (because for comparison forms we plot the two numerical expressions)
+  () => form.value !== undefined && !comparison.value.comp,
+);
 
 type Trace = Partial<Plotly.Data> & { intensity?: Plotly.Datum[] }; // intensity is missing in the Plotly type defs
 
@@ -180,7 +188,7 @@ const exprValue = computed<ExprValue | undefined>(() => {
   return props.exprValues[expr.value.hash];
 });
 
-const epxrValueBounds = computed<Interval<number[]> | undefined>(() => {
+const exprValueBounds = computed<Interval<number[]> | undefined>(() => {
   // work out which var expr corresponds to x and y
   const varExprs = getExprVarExprs(expr.value!);
   const xExprHash = varExprs[xVar.value]?.hash;
@@ -202,11 +210,11 @@ const epxrValueBounds = computed<Interval<number[]> | undefined>(() => {
 const customdata = computed(() =>
   fpValues.value && zIsBool.value
     ? fpValues.value?.map((k) => [`${k === "CertainTrue"}`])
-    : fpValues.value && epxrValueBounds.value
+    : fpValues.value && expr.value && exprValueBounds.value
       ? (_.zip(
           fpValues.value as number[],
-          epxrValueBounds.value.l,
-          epxrValueBounds.value.u,
+          exprValueBounds.value.l,
+          exprValueBounds.value.u,
         ) as number[][])
       : undefined,
 );
@@ -247,7 +255,7 @@ function getFPValueTraces(): Trace[] {
   const triangulation = denseTriangulation.value;
   const f = form.value;
   const e = expr.value;
-  const { e1, e2, comp } = f ? decomposeBinaryComp(f) : {};
+  const { e1, e2, comp } = comparison.value;
 
   if ((!f && !e) || (e && f) || !triangulation) {
     return [];
@@ -257,18 +265,31 @@ function getFPValueTraces(): Trace[] {
   let colorscale: Plotly.ColorScale = [];
 
   if (f) {
-    if (comp && e1 && e2) {
-      // return getFPValueCompTraces(e1, e2, comp);
-      // const e1Values = evalEnvs.value.map((env) => evalFPExpr(e1, env)) as number[];
-      // const e2Values = evalEnvs.value.map((env) => evalFPExpr(e2, env)) as number[];
-      // if (comp === "<") {
-      //   z = e1Values.map((v, i) => v < e2Values[i] ? boolHeight.value : -boolHeight.value);
-      //   colorscale = getKleeneanColourscale(z, 0);
-      // } else if (comp === "<=") {
-      //   z = e1Values.map((v, i) => v <= e2Values[i] ? boolHeight.value : -boolHeight.value);
-      //   colorscale = getKleeneanColourscale(z, 0);
-      // } else {
-      //   // for other comparisons, just show the value of the expression without colouring
+    if (comp) {
+      // a comparison form, show the values of both expressions
+      // and use colour to indicate the result of the comparison
+
+      const z1 = getFPValuesE(e1) as number[];
+      const z2 = getFPValuesE(e2) as number[];
+
+      /** z2 - z1 */
+      const zdiff = z2.map((v, i) => v - z1[i]!);
+      /** |z2 - z1| */
+      const zdiffAbs = zdiff.map((v) => Math.abs(v));
+
+      const intensity =
+        comp === "CompLe" || comp === "CompLeq"
+          ? zdiff // positive values indicate true and negative values indicate false
+          : comp === "CompEq"
+            ? zdiffAbs.map((v) => -v) // z1 == z2 is false except where z2-z1==0
+            : zdiffAbs; // z1 != z2 is true where except where z2-z1=0
+
+      const colorscale = getKleeneanColourscale(intensity, 0);
+
+      const trace1 = makeFPValueTrace(triangulation, z1, intensity, colorscale);
+      const trace2 = makeFPValueTrace(triangulation, z2, intensity, colorscale);
+
+      return [trace1, trace2];
     }
 
     const kleeneans = fpValues.value as Kleenean[];
@@ -288,7 +309,6 @@ function getFPValueTraces(): Trace[] {
 
   return [makeFPValueTrace(triangulation, z, z, colorscale)];
 }
-
 
 function getKleeneanColourscale(
   intensity: number[],
@@ -348,7 +368,7 @@ function getBoundsTraces(): Trace[] {
   const triangulation = denseTriangulation.value;
   const e = expr.value;
   const eValue = exprValue.value;
-  if (!triangulation || !e || !eValue || !epxrValueBounds.value) {
+  if (!triangulation || !e || !eValue || !exprValueBounds.value) {
     return [];
   }
 
@@ -356,7 +376,7 @@ function getBoundsTraces(): Trace[] {
     [0, "rgb(200,100,100)"],
     [1, "rgb(200,100,100)"],
   ];
-  const { l, u } = epxrValueBounds.value;
+  const { l, u } = exprValueBounds.value;
   function mkBoundTrace(z: Plotly.Datum[]): Trace {
     return {
       type: "mesh3d",
