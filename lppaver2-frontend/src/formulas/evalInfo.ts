@@ -23,6 +23,20 @@ export function intervalWidth(interval: Interval<number>): number {
   return interval.u - interval.l;
 }
 
+export function intervalsAreDisjoint(
+  interval1: Interval<number>,
+  interval2: Interval<number>,
+): boolean {
+  return interval1.u < interval2.l || interval2.u < interval1.l;
+}
+
+export function intervalsOverlap(
+  interval1: Interval<number>,
+  interval2: Interval<number>,
+): boolean {
+  return !intervalsAreDisjoint(interval1, interval2);
+}
+
 export type AffineForm = {
   center: number;
   errTerms: Record<string, number>;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Plotly from "plotly.js-dist-min";
+import Plotly, { type ColorScale } from "plotly.js-dist-min";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   decomposeBinaryComp,
@@ -9,14 +9,14 @@ import {
 import { type Box } from "@/steps/steps";
 import { getExprVarExprs, type Expr, type Var } from "../formulas/exprs";
 import { pickXY } from "@/boxes/pickVars";
-import _ from "lodash";
+import _, { get } from "lodash";
 import { getTruthColour, useStepsStore } from "@/steps/stepsStore";
 import {
   getHexTriangulation,
   type DomainAndN,
   type Triangulation2D,
 } from "../formulas/mesh";
-import { evalFPExpr, evalFPForm } from "../formulas/evalFP";
+import { evalFPExpr, evalFPForm, evalIntervalComp } from "../formulas/evalFP";
 import { kleeneanSwitch, type Kleenean } from "../formulas/kleenean";
 import {
   evalExprOnTriangulation,
@@ -183,15 +183,18 @@ const fpValues = computed(() => {
   }
 });
 
-const exprValue = computed<ExprValue | undefined>(() => {
-  if (!expr.value) return undefined;
+function getEValue(e: Expr | undefined): ExprValue | undefined {
+  return e ? props.exprValues[e.hash] : undefined;
+}
 
-  return props.exprValues[expr.value.hash];
-});
+function getExprValueBounds(
+  e: Expr | undefined,
+): Interval<number[]> | undefined {
+  const eValue = getEValue(e);
+  if (!e || !eValue) return undefined;
 
-const exprValueBounds = computed<Interval<number[]> | undefined>(() => {
   // work out which var expr corresponds to x and y
-  const varExprs = getExprVarExprs(expr.value!);
+  const varExprs = getExprVarExprs(e);
   const xExprHash = varExprs[xVar.value]?.hash;
   const yExprHash = varExprs[yVar.value]?.hash;
   // lookup the affine error term IDs corresponding to x and y
@@ -199,14 +202,16 @@ const exprValueBounds = computed<Interval<number[]> | undefined>(() => {
   const yExprValue = yExprHash ? props.exprValues[yExprHash] : undefined;
 
   return evalExprOnTriangulation(
-    exprValue.value,
+    eValue,
     xExprValue,
     yExprValue,
     xVarDomain.value,
     yVarDomain.value,
     denseTriangulation.value,
   );
-});
+}
+
+const exprValueBounds = computed(() => getExprValueBounds(expr.value));
 
 const customdata = computed(() =>
   fpValues.value && zIsBool.value
@@ -311,26 +316,28 @@ const fpValueTraces = computed<Trace[]>(() => {
   return [makeFPValueTrace(triangulation, z, z, colorscale)];
 });
 
-const boundsTraces = computed<Trace[]>(() => {
+function makeBoundTraces(
+  e: Expr | undefined,
+  truthValues?: number[],
+): Trace[] {
   const triangulation = denseTriangulation.value;
-  const e = expr.value;
-  const eValue = exprValue.value;
-  if (!triangulation || !e || !eValue || !exprValueBounds.value) {
-    return [];
-  }
+  if (!triangulation) return [];
 
-  const colorscale: Plotly.ColorScale = [
+  const eBounds = getExprValueBounds(e);
+  if (!eBounds) return [];
+
+  const colorscalePink : ColorScale = [
     [0, "rgb(200,100,100)"],
     [1, "rgb(200,100,100)"],
   ];
-  const { l, u } = exprValueBounds.value;
+
   function mkBoundTrace(z: Plotly.Datum[]): Trace {
     return {
       type: "mesh3d",
       name: "",
       z,
-      colorscale,
-      intensity: Array(z.length).fill(0),
+      colorscale: truthValues ? getKleeneanColourscale(truthValues, 0) : colorscalePink,
+      intensity: truthValues ?? Array(z.length).fill(0),
       opacity: 0.5,
       showlegend: false,
       showscale: false,
@@ -340,9 +347,44 @@ const boundsTraces = computed<Trace[]>(() => {
       hoverinfo: "none", // do not show the trace name beside the template
     };
   }
+
+  const { l, u } = eBounds;
   const lBoundTrace: Trace = mkBoundTrace(l);
   const uBoundTrace: Trace = mkBoundTrace(u);
   return [lBoundTrace, uBoundTrace];
+}
+
+const boundsTraces = computed<Trace[]>(() => {
+  const { comp, e1, e2 } = comparison.value;
+  if (expr.value) {
+    return makeBoundTraces(expr.value);
+  } else if (comp) {
+    // obtain bounds for both expressions in the comparison
+    const e1Bounds = getExprValueBounds(e1);
+    const e2Bounds = getExprValueBounds(e2);
+    if (!e1Bounds || !e2Bounds) return [];
+
+    // evaluate the comparison on the bounds at all triangulation points to get a Kleenean value for each point
+    const compValues = evalEnvs.value.map((env, i) => {
+      const e1BoundAtPoint: Interval<number> = {
+        l: e1Bounds.l[i]!,
+        u: e1Bounds.u[i]!,
+      };
+      const e2BoundAtPoint: Interval<number> = {
+        l: e2Bounds.l[i]!,
+        u: e2Bounds.u[i]!,
+      };
+      return evalIntervalComp(comp!, e1BoundAtPoint, e2BoundAtPoint);
+    });
+
+    const z = compValues.map((k) =>
+      kleeneanSwitch(k, 1, 0, -1),
+    );
+
+    return [...makeBoundTraces(e1, z), ...makeBoundTraces(e2, z)];
+  } else {
+    return [];
+  }
 });
 
 const showExpValues = ref(true);
