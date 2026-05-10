@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       LPPaver2.BranchAndPrune
+      LPPaver2.ExampleProblems
       LPPaver2.Export
       LPPaver2.LinearPrune
       LPPaver2.RealConstraints
