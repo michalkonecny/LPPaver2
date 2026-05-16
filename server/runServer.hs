@@ -5,19 +5,19 @@
 
 module Main (main) where
 
+import BranchAndPrune.BranchAndPrune (Problem (..))
 import Control.Concurrent (MVar, newMVar)
-import Control.Monad (forever)
 import Data.Aeson qualified as A
 import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
 import GHC.Generics (Generic)
+import GHC.Records
 import LPPaver2.BranchAndPrune (LPPProblem)
 import LPPaver2.ExampleProblems (exampleProblems)
 import LPPaver2.Export ()
-import LPPaver2.RealConstraints.Boxes (BoxStore)
-import Network.WebSockets (withPingThread)
+import LPPaver2.RealConstraints.Boxes (BoxStore, Box(..))
 import Network.WebSockets qualified as WS
 import Prelude
 
@@ -93,7 +93,10 @@ instance A.ToJSON Response where
 instance IsRequestResponse GetExampleProblemsRequest where
   type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
   handleRequest _ = do
-    pure $ ExampleProblemsResponse {problems = exampleProblems 0, boxes = Map.empty}
+    let problems = exampleProblems 0
+    let scopes = map (\p -> scope (p :: LPPProblem)) $ Map.elems problems
+    let boxes = Map.fromList [(box.boxHash, box) | box <- scopes]
+    pure $ ExampleProblemsResponse {problems = problems, boxes = boxes}
 
 data GetExampleProblemsRequest = GetExampleProblemsRequest
   deriving (Generic, Show)

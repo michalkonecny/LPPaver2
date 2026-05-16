@@ -56,9 +56,10 @@ export const useProverStore = defineStore('prover', () => {
   async function _watchProverMessages() {
     const ws = await _getWS();
     ws.addEventListener('message', (ws, event) => {
-      console.log(`ws message event:`, event);
+      // console.log(`ws message event:`, event);
 
       const message = JSON.parse(event.data);
+      console.log(`ws message:`, message);
       switch (message.tag) {
         case 'ResponseExampleProblems': {
           exampleProblems.value = message.contents.problems;
