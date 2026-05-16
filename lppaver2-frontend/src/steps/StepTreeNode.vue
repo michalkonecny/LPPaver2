@@ -1,86 +1,79 @@
 <script lang="ts" setup>
-import { storeToRefs } from "pinia";
-import { computed, ref, watch } from "vue";
-import { useStepsStore } from "./stepsStore";
-import { getSubProblems, sameProblem, type Problem } from "./steps";
+  import { storeToRefs } from 'pinia';
+  import { computed, ref, watch } from 'vue';
+  import { useStepsStore } from './stepsStore';
+  import { getSubProblems } from './steps';
+  import { sameProblem, type Problem } from '@/problems/problems';
 
-const props = defineProps<{
-  problem: Problem;
-}>();
+  const props = defineProps<{
+    problem: Problem;
+  }>();
 
-const stepsStore = useStepsStore();
+  const stepsStore = useStepsStore();
 
-const { focusedProblem, zoomedProblem } = storeToRefs(stepsStore);
+  const { focusedProblem, zoomedProblem } = storeToRefs(stepsStore);
 
-const step = stepsStore.stepFromProblem(props.problem);
+  const step = stepsStore.stepFromProblem(props.problem);
 
-const stepTruth = stepsStore.getStepTruthResult(step);
+  const stepTruth = stepsStore.getStepTruthResult(step);
 
-const stepTruthNote =
-  stepTruth === "CertainTrue"
-    ? " (True)"
-    : stepTruth === "CertainFalse"
-      ? " (False)"
-      : "";
+  const stepTruthNote =
+    stepTruth === 'CertainTrue' ? ' (True)' : stepTruth === 'CertainFalse' ? ' (False)' : '';
 
-const stepCategory =
-  step.tag === "ProgressStep"
-    ? step.progressPaving.undecided.length == 0
-      ? "Decided"
-      : step.progressPaving.inner.boxes.length > 0
-        ? "Prune True"
-        : step.progressPaving.outer.boxes.length > 0
-          ? "Prune False"
-          : "Split"
-    : step.tag;
+  const stepCategory =
+    step.tag === 'ProgressStep'
+      ? step.progressPaving.undecided.length == 0
+        ? 'Decided'
+        : step.progressPaving.inner.boxes.length > 0
+          ? 'Prune True'
+          : step.progressPaving.outer.boxes.length > 0
+            ? 'Prune False'
+            : 'Split'
+      : step.tag;
 
-const stepLabel = `${stepCategory}${stepTruthNote}`;
+  const stepLabel = `${stepCategory}${stepTruthNote}`;
 
-const subProblems = getSubProblems(step);
+  const subProblems = getSubProblems(step);
 
-const isFocused = computed(() =>
-  sameProblem(props.problem, focusedProblem.value),
-);
-const isZoomed = computed(() =>
-  sameProblem(props.problem, zoomedProblem.value),
-);
+  const isFocused = computed(() => sameProblem(props.problem, focusedProblem.value));
+  const isZoomed = computed(() => sameProblem(props.problem, zoomedProblem.value));
 
-const classes = computed(() => {
-  return {
-    normal: !isFocused.value && !isZoomed.value,
-    focused: isFocused.value && !isZoomed.value,
-    zoomed: isZoomed.value && !isFocused.value,
-    focusedAndZoomed: isFocused.value && isZoomed.value,
-  };
-});
+  const classes = computed(() => {
+    return {
+      normal: !isFocused.value && !isZoomed.value,
+      focused: isFocused.value && !isZoomed.value,
+      zoomed: isZoomed.value && !isFocused.value,
+      focusedAndZoomed: isFocused.value && isZoomed.value,
+    };
+  });
 
-// Focus this problem when clicked
-function focusHere(event: MouseEvent) {
-  focusedProblem.value = props.problem;
-  // prevent event bubbling
-  event.stopPropagation();
-}
-
-// Zoom this problem when double-clicked
-function zoomHere(event: MouseEvent) {
-  zoomedProblem.value = props.problem;
-  // prevent event bubbling
-  event.stopPropagation();
-}
-
-const el = ref<HTMLElement | null>(null);
-
-// Scroll to here when focused
-watch(focusedProblem, (newVal) => {
-  if (sameProblem(newVal, props.problem)) {
-    // Scroll this element into view
-    el.value?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-      inline: "center",
-    });
+  // Focus this problem when clicked
+  function focusHere(event: MouseEvent) {
+    focusedProblem.value = props.problem;
+    // prevent event bubbling
+    event.stopPropagation();
   }
-});
+
+  // Zoom this problem when double-clicked
+  function zoomHere(event: MouseEvent) {
+    zoomedProblem.value = props.problem;
+    // prevent event bubbling
+    event.stopPropagation();
+  }
+
+  const el = ref<HTMLElement | null>(null);
+
+  // Scroll to here when focused
+  watch(focusedProblem, (newVal) => {
+    if (sameProblem(newVal, props.problem)) {
+      // Scroll this element into view
+      el.value?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+        inline: 'center',
+      });
+    }
+  });
 </script>
 
 <template>
@@ -98,12 +91,7 @@ watch(focusedProblem, (newVal) => {
         </td>
       </tr>
       <tr v-for="subProblem in subProblems">
-        <td
-          class="text-center"
-          style="width: 15px; vertical-align: top; color: midnightblue"
-        >
-          ↳
-        </td>
+        <td class="text-center" style="width: 15px; vertical-align: top; color: midnightblue">↳</td>
         <td>
           <StepTreeNode :problem="subProblem" />
         </td>

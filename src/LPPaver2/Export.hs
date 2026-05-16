@@ -58,6 +58,9 @@ instance A.ToJSON Box_ where
 instance A.ToJSON BoxHash where
   toJSON (BoxHash h) = A.String (intToText h)
 
+instance A.ToJSONKey BoxHash where
+  toJSONKey = A.toJSONKeyText (intToText . \(BoxHash h) -> h) 
+
 intToText :: Int -> T.Text
 intToText = TL.toStrict . B.toLazyText . B.decimal
 

@@ -6,17 +6,23 @@ export function kleeneanFromBoolean(b: boolean): Kleenean {
 
 export function kleeneanSwitch<T>(k: Kleenean, onTrue: T, onUndecided: T, onFalse: T): T {
   switch (k) {
-    case 'CertainTrue': return onTrue;
-    case 'TrueOrFalse': return onUndecided;
-    case 'CertainFalse': return onFalse;
+    case 'CertainTrue':
+      return onTrue;
+    case 'TrueOrFalse':
+      return onUndecided;
+    case 'CertainFalse':
+      return onFalse;
   }
 }
 
 export function kleeneanNot(k: Kleenean): Kleenean {
   switch (k) {
-    case 'CertainTrue': return 'CertainFalse';
-    case 'CertainFalse': return 'CertainTrue';
-    case 'TrueOrFalse': return 'TrueOrFalse';
+    case 'CertainTrue':
+      return 'CertainFalse';
+    case 'CertainFalse':
+      return 'CertainTrue';
+    case 'TrueOrFalse':
+      return 'TrueOrFalse';
   }
 }
 
