@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { useProverStore } from '@/proverLink/proverStore';
 import type { Kleenean } from '@/formulas/kleenean';
 import type { ExprValue } from '@/formulas/evalInfo';
 import type { Box, BoxHash } from '@/boxes/boxes';
@@ -12,12 +13,10 @@ import {
   type FormOrExprHash,
 } from '../formulas/forms';
 import { getStepProblem, type Step } from './steps';
-// import { useProverStore } from "@/proverLink/proverStore";
-
-// const proverStore = useProverStore();
 
 export const useStepsStore = defineStore('steps', {
   state: () => ({
+    proverStore: useProverStore(),
     sessionRef: null as string | null,
     boxes: {} as Record<BoxHash, Box>,
     exprs: {} as Record<ExprHash, ExprF<ExprHash>>,
@@ -32,7 +31,7 @@ export const useStepsStore = defineStore('steps', {
   }),
   actions: {
     async initSession(sessionRef: string) {
-      // await proverStore.requestExampleProblems();
+      await this.proverStore.requestExampleProblems();
 
       this.sessionRef = sessionRef;
       // fetch boxes from redis
