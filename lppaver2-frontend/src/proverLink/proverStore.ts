@@ -1,52 +1,29 @@
 import { defineStore } from 'pinia';
 import { ref, type Ref } from 'vue';
 import _ from 'lodash';
-import { Websocket, WebsocketBuilder } from 'websocket-ts';
+import { getProverWS } from './proverWS';
 import type { Problem } from '@/problems/problems';
+import type { Box, BoxHash } from '@/boxes/boxes';
+import type { ExprF, ExprHash } from '@/formulas/exprs';
+import type { FormF, FormHash } from '@/formulas/forms';
 
 export const useProverStore = defineStore('prover', () => {
   const exampleProblems: Ref<Problem[]> = ref([]);
+  const boxes: Ref<Record<BoxHash, Box>> = ref({});
+  const exprs: Ref<Record<ExprHash, ExprF<ExprHash>>> = ref({});
+  const forms: Ref<Record<FormHash, FormF<ExprHash, FormHash>>> = ref({});
 
   const exports = {
     exampleProblems,
+    boxes,
+    exprs,
+    forms,
     requestExampleProblems,
   };
 
   async function requestExampleProblems() {
-    const ws = await _getWS();
+    const ws = await getProverWS();
     ws.send(JSON.stringify({ type: 'GetExampleProblems' }));
-  }
-
-  ///////////////////////////////////////////////
-  // Websocket connection to the prover backend
-  ///////////////////////////////////////////////
-
-  /** either null or an active Websocket connection */
-  const _ws: Ref<Websocket | null> = ref(null);
-
-  /** initialize the websocket connection to the prover backend */
-  async function _initProverWS() {
-    // start a websocket connection to the prover backend
-    const ws = new WebsocketBuilder('ws://localhost:9160').build();
-    // wait until connection is open before proceeding
-    await new Promise<void>((resolve) => {
-      ws.addEventListener('open', () => resolve());
-    });
-    _ws.value = ws;
-  }
-
-  // immediately initialize the websocket connection when the store is created
-  _initProverWS();
-
-  /** wait until the websocket connection is established and return it */
-  async function _getWS() {
-    // This loop executes only when an action is called before the websocket connection
-    // is established, which is unlikely but possible.
-    // In that case, we poll until the connection is ready before proceeding.
-    while (!_ws.value) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return _ws.value;
   }
 
   //////////////////////////////////////////
@@ -54,11 +31,11 @@ export const useProverStore = defineStore('prover', () => {
   //////////////////////////////////////////
 
   async function _watchProverMessages() {
-    const ws = await _getWS();
+    const ws = await getProverWS();
     ws.addEventListener('message', (ws, event) => {
       // console.log(`ws message event:`, event);
 
-      const message = JSON.parse(event.data);
+      const message: ProverMessage = JSON.parse(event.data);
       console.log(`ws message:`, message);
       switch (message.tag) {
         case 'ResponseExampleProblems': {
