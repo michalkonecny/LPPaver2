@@ -19,16 +19,16 @@ import GHC.Records
 import LPPaver2.BranchAndPrune (LPPProblem)
 import LPPaver2.ExampleProblems (exampleProblems)
 import LPPaver2.Export ()
-import LPPaver2.RealConstraints.Boxes (Box (..), BoxStore)
+import LPPaver2.RealConstraints.Boxes (BoxStore)
 import Network.WebSockets qualified as WS
-import ServerState (ServerState (..), newServerState, addBoxes)
+import ServerState (ServerState (..))
+import ServerState qualified
 import Prelude
-import Data.Text.Array (new)
 
 main :: IO ()
 main = do
   putStrLn "Starting LPPaver2 server."
-  state <- newMVar newServerState
+  state <- newMVar ServerState.new
   WS.runServer "127.0.0.1" 9160 $ application state
 
 application :: MVar ServerState -> WS.ServerApp
@@ -58,9 +58,10 @@ instance IsRequestResponse GetExampleProblemsRequest where
   type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
   handleRequest state _ = do
     let problems = exampleProblems 0
-    let scopes = map (\p -> scope (p :: LPPProblem)) $ Map.elems problems
-    let newState = addBoxes state scopes
-    pure (newState, ExampleProblemsResponse {problems = problems, boxes = newState.allBoxes})
+    let scopes = map (\p -> p.scope) $ Map.elems problems
+    let problemForms = map (\p -> p.constraint) $ Map.elems problems
+    let newState = ServerState.addBoxes scopes $ ServerState.addForms problemForms state
+    pure (newState, ExampleProblemsResponse {problems = problems, boxes = newState.boxes})
 
 data GetExampleProblemsRequest = GetExampleProblemsRequest
   deriving (Generic, Show)

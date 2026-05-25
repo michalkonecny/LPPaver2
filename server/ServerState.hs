@@ -1,23 +1,37 @@
-module ServerState (ServerState (..), newServerState, addBoxes) where
+module ServerState (ServerState (..), new, addBoxes, addForms) where
 
+import Data.List qualified as List
 import Data.Map qualified as Map
 import GHC.Records
-import LPPaver2.RealConstraints (Box (..), BoxStore, ExprStore, FormStore)
+import LPPaver2.RealConstraints (Box (..), BoxStore, ExprStore, Form (..), FormStore)
+import Prelude
 
 data ServerState = ServerState
-  { allBoxes :: BoxStore,
+  { boxes :: BoxStore,
     exprs :: ExprStore,
     forms :: FormStore
   }
 
-newServerState :: ServerState
-newServerState =
+new :: ServerState
+new =
   ServerState
-    { allBoxes = Map.empty,
+    { boxes = Map.empty,
       exprs = Map.empty,
       forms = Map.empty
     }
 
-addBoxes :: ServerState -> [Box] -> ServerState
-addBoxes state newBoxes =
-  state {allBoxes = state.allBoxes `Map.union` Map.fromList [(b.boxHash, b) | b <- newBoxes]}
+addBoxes :: [Box] -> ServerState -> ServerState
+addBoxes newBoxes state =
+  state {boxes = state.boxes `Map.union` newBoxesMap}
+  where
+    newBoxesMap = Map.fromList [(b.boxHash, b) | b <- newBoxes]
+
+addForms :: [Form] -> ServerState -> ServerState
+addForms newForms state =
+  state
+    { exprs = Map.unions $ state.exprs : newExprNodes,
+      forms = Map.unions $ state.forms : newFormNodes
+    }
+  where
+    newExprNodes = List.map (\f -> f.nodesE) newForms
+    newFormNodes = List.map (\f -> f.nodesF) newForms
