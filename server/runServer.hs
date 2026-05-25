@@ -6,7 +6,7 @@
 module Main (main) where
 
 import BranchAndPrune.BranchAndPrune (Problem (..))
-import Control.Concurrent (MVar, newMVar, modifyMVar)
+import Control.Concurrent (MVar, modifyMVar, newMVar)
 import Data.Aeson qualified as A
 import Data.Map qualified as Map
 import Data.Text (Text)
@@ -19,24 +19,11 @@ import GHC.Records
 import LPPaver2.BranchAndPrune (LPPProblem)
 import LPPaver2.ExampleProblems (exampleProblems)
 import LPPaver2.Export ()
-import LPPaver2.RealConstraints (ExprStore, FormStore)
 import LPPaver2.RealConstraints.Boxes (Box (..), BoxStore)
 import Network.WebSockets qualified as WS
+import ServerState (ServerState (..), newServerState, addBoxes)
 import Prelude
-
-data ServerState = ServerState
-  { allBoxes :: BoxStore,
-    exprs :: ExprStore,
-    forms :: FormStore
-  }
-
-newServerState :: ServerState
-newServerState =
-  ServerState
-    { allBoxes = Map.empty,
-      exprs = Map.empty,
-      forms = Map.empty
-    }
+import Data.Text.Array (new)
 
 main :: IO ()
 main = do
@@ -62,6 +49,37 @@ requestResponse stateMVar conn = do
   let responseJSON = A.encode response
   putStrLn $ "Sending response: " ++ TL.unpack (TL.decodeUtf8 responseJSON)
   WS.sendTextData conn responseJSON
+
+------------------------
+--- Example problems ---
+------------------------
+
+instance IsRequestResponse GetExampleProblemsRequest where
+  type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
+  handleRequest state _ = do
+    let problems = exampleProblems 0
+    let scopes = map (\p -> scope (p :: LPPProblem)) $ Map.elems problems
+    let newState = addBoxes state scopes
+    pure (newState, ExampleProblemsResponse {problems = problems, boxes = newState.allBoxes})
+
+data GetExampleProblemsRequest = GetExampleProblemsRequest
+  deriving (Generic, Show)
+
+instance A.FromJSON GetExampleProblemsRequest where
+  parseJSON = A.withObject "GetExampleProblemsRequest" $ \_ -> pure GetExampleProblemsRequest
+
+data ExampleProblemsResponse = ExampleProblemsResponse
+  { problems :: Map.Map String LPPProblem,
+    boxes :: BoxStore
+  }
+  deriving (Generic)
+
+instance A.ToJSON ExampleProblemsResponse where
+  toEncoding = A.genericToEncoding A.defaultOptions
+
+------------------------------------------------
+--- Request/Response boilerplate and parsing ---
+------------------------------------------------
 
 -- TODO: add continnuation for further responses
 class IsRequestResponse request where
@@ -93,7 +111,7 @@ parseRequest msg =
         Right req -> do
           putStrLn $ "Parsed GetExampleProblemsRequest: " ++ show req
           return (RequestGetExampleProblems req)
-        Left err1 -> do
+        Left _err1 -> do
           -- case A.eitherDecodeStrict msgBS of
           --   Right req -> do
           --     return RequestTODO
@@ -102,28 +120,4 @@ parseRequest msg =
           fail "Invalid request"
 
 instance A.ToJSON Response where
-  toEncoding = A.genericToEncoding A.defaultOptions
-
-instance IsRequestResponse GetExampleProblemsRequest where
-  type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
-  handleRequest state _ = do
-    let problems = exampleProblems 0
-    let scopes = map (\p -> scope (p :: LPPProblem)) $ Map.elems problems
-    let problemBoxes = Map.fromList [(box.boxHash, box) | box <- scopes]
-    let newState = state {allBoxes = Map.union state.allBoxes problemBoxes}
-    pure (newState, ExampleProblemsResponse {problems = problems, boxes = problemBoxes})
-
-data GetExampleProblemsRequest = GetExampleProblemsRequest
-  deriving (Generic, Show)
-
-instance A.FromJSON GetExampleProblemsRequest where
-  parseJSON = A.withObject "GetExampleProblemsRequest" $ \_ -> pure GetExampleProblemsRequest
-
-data ExampleProblemsResponse = ExampleProblemsResponse
-  { problems :: Map.Map String LPPProblem,
-    boxes :: BoxStore
-  }
-  deriving (Generic)
-
-instance A.ToJSON ExampleProblemsResponse where
   toEncoding = A.genericToEncoding A.defaultOptions

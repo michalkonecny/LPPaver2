@@ -72,6 +72,7 @@ library
 executable lppaver2-server
   main-is: runServer.hs
   other-modules:
+      ServerState
       Paths_LPPaver2
   autogen-modules:
       Paths_LPPaver2
