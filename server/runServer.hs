@@ -6,25 +6,37 @@
 module Main (main) where
 
 import BranchAndPrune.BranchAndPrune (Problem (..))
-import Control.Concurrent (MVar, newMVar)
+import Control.Concurrent (MVar, newMVar, modifyMVar)
 import Data.Aeson qualified as A
 import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
+import Data.Text.Lazy qualified as TL
+import Data.Text.Lazy.Encoding qualified as TL
 import GHC.Generics (Generic)
 import GHC.Records
 import LPPaver2.BranchAndPrune (LPPProblem)
 import LPPaver2.ExampleProblems (exampleProblems)
 import LPPaver2.Export ()
-import LPPaver2.RealConstraints.Boxes (BoxStore, Box(..))
+import LPPaver2.RealConstraints (ExprStore, FormStore)
+import LPPaver2.RealConstraints.Boxes (Box (..), BoxStore)
 import Network.WebSockets qualified as WS
 import Prelude
 
-type ServerState = ()
+data ServerState = ServerState
+  { allBoxes :: BoxStore,
+    exprs :: ExprStore,
+    forms :: FormStore
+  }
 
 newServerState :: ServerState
-newServerState = ()
+newServerState =
+  ServerState
+    { allBoxes = Map.empty,
+      exprs = Map.empty,
+      forms = Map.empty
+    }
 
 main :: IO ()
 main = do
@@ -33,27 +45,28 @@ main = do
   WS.runServer "127.0.0.1" 9160 $ application state
 
 application :: MVar ServerState -> WS.ServerApp
-application _state pending = do
+application stateMVar pending = do
   conn <- WS.acceptRequest pending
   putStrLn "Client connected."
   -- withPingThread conn 30 (return ()) (forever (requestResponse conn))
-  requestResponse conn
+  requestResponse stateMVar conn
 
-requestResponse :: WS.Connection -> IO ()
-requestResponse conn = do
+requestResponse :: MVar ServerState -> WS.Connection -> IO ()
+requestResponse stateMVar conn = do
   putStrLn "waiting for message from client..."
   msg <- WS.receiveData conn :: IO Text
   putStrLn $ "Received message: " ++ T.unpack msg
-
   request <- parseRequest msg
-  response <- handleRequest request
+  response <- modifyMVar stateMVar $ \state ->
+    handleRequest state request
   let responseJSON = A.encode response
-  putStrLn $ "Sending response: " ++ show responseJSON
+  putStrLn $ "Sending response: " ++ TL.unpack (TL.decodeUtf8 responseJSON)
   WS.sendTextData conn responseJSON
 
+-- TODO: add continnuation for further responses
 class IsRequestResponse request where
   type ResponseType request
-  handleRequest :: request -> IO (ResponseType request) -- TODO: sequence of responses, add state
+  handleRequest :: ServerState -> request -> IO (ServerState, ResponseType request)
 
 data Request
   = RequestGetExampleProblems GetExampleProblemsRequest
@@ -67,10 +80,11 @@ data Response
 
 instance IsRequestResponse Request where
   type ResponseType Request = Response
-  handleRequest (RequestGetExampleProblems req) =
-    ResponseExampleProblems <$> handleRequest req
-  handleRequest RequestTODO =
-    pure ResponseTODO
+  handleRequest state (RequestGetExampleProblems req) = do
+    (newState, resp) <- handleRequest state req
+    pure (newState, ResponseExampleProblems resp)
+  handleRequest state RequestTODO =
+    pure (state, ResponseTODO)
 
 parseRequest :: Text -> IO Request
 parseRequest msg =
@@ -92,11 +106,12 @@ instance A.ToJSON Response where
 
 instance IsRequestResponse GetExampleProblemsRequest where
   type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
-  handleRequest _ = do
+  handleRequest state _ = do
     let problems = exampleProblems 0
     let scopes = map (\p -> scope (p :: LPPProblem)) $ Map.elems problems
-    let boxes = Map.fromList [(box.boxHash, box) | box <- scopes]
-    pure $ ExampleProblemsResponse {problems = problems, boxes = boxes}
+    let problemBoxes = Map.fromList [(box.boxHash, box) | box <- scopes]
+    let newState = state {allBoxes = Map.union state.allBoxes problemBoxes}
+    pure (newState, ExampleProblemsResponse {problems = problems, boxes = problemBoxes})
 
 data GetExampleProblemsRequest = GetExampleProblemsRequest
   deriving (Generic, Show)
