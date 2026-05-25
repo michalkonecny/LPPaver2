@@ -19,11 +19,17 @@ export const useProverStore = defineStore('prover', () => {
     exprs,
     forms,
     requestExampleProblems,
+    requestAllFormulaNodes,
   };
 
   async function requestExampleProblems() {
     const ws = await getProverWS();
-    ws.send(JSON.stringify({ type: 'GetExampleProblems' }));
+    ws.send(JSON.stringify('GetExampleProblemsRequest'));
+  }
+
+  async function requestAllFormulaNodes() {
+    const ws = await getProverWS();
+    ws.send(JSON.stringify('GetAllFormulaNodesRequest'));
   }
 
   //////////////////////////////////////////
@@ -40,10 +46,16 @@ export const useProverStore = defineStore('prover', () => {
       switch (message.tag) {
         case 'ResponseExampleProblems': {
           exampleProblems.value = message.contents.problems;
+          boxes.value = { ...boxes.value, ...message.contents.boxes };
+          break;
+        }
+        case 'ResponseFormulaNodes': {
+          exprs.value = { ...exprs.value, ...message.contents.exprs };
+          forms.value = { ...forms.value, ...message.contents.forms };
           break;
         }
         default:
-          console.warn('Unknown message type from prover backend:', message.tag);
+          console.warn('Unrecognised message from prover backend:', message);
       }
     });
   }
@@ -54,9 +66,18 @@ export const useProverStore = defineStore('prover', () => {
   return exports;
 });
 
-type ProverMessage = {
-  tag: 'ResponseExampleProblems' | string;
-  contents: {
-    problems: Problem[];
-  };
-};
+type ProverMessage =
+  | {
+      tag: 'ResponseExampleProblems';
+      contents: {
+        problems: Problem[];
+        boxes: Record<BoxHash, Box>;
+      };
+    }
+  | {
+      tag: 'ResponseFormulaNodes';
+      contents: {
+        exprs: Record<ExprHash, ExprF<ExprHash>>;
+        forms: Record<FormHash, FormF<ExprHash, FormHash>>;
+      };
+    };

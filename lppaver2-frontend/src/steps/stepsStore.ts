@@ -13,6 +13,7 @@ import {
   type FormOrExprHash,
 } from '../formulas/forms';
 import { getStepProblem, type Step } from './steps';
+import { watch } from 'vue';
 
 export const useStepsStore = defineStore('steps', {
   state: () => ({
@@ -31,6 +32,12 @@ export const useStepsStore = defineStore('steps', {
   }),
   actions: {
     async initSession(sessionRef: string) {
+      watch(
+        () => this.proverStore.exampleProblems,
+        () => {
+          this.proverStore.requestAllFormulaNodes();
+        },
+      );
       await this.proverStore.requestExampleProblems();
 
       this.sessionRef = sessionRef;

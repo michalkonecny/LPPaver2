@@ -19,11 +19,13 @@ import GHC.Records
 import LPPaver2.BranchAndPrune (LPPProblem)
 import LPPaver2.ExampleProblems (exampleProblems)
 import LPPaver2.Export ()
+import LPPaver2.RealConstraints (ExprStore, FormStore)
 import LPPaver2.RealConstraints.Boxes (BoxStore)
 import Network.WebSockets qualified as WS
 import ServerState (ServerState (..))
 import ServerState qualified
 import Prelude
+import Control.Monad (forever)
 
 main :: IO ()
 main = do
@@ -36,13 +38,14 @@ application stateMVar pending = do
   conn <- WS.acceptRequest pending
   putStrLn "Client connected."
   -- withPingThread conn 30 (return ()) (forever (requestResponse conn))
-  requestResponse stateMVar conn
+  forever $ requestResponse stateMVar conn
 
 requestResponse :: MVar ServerState -> WS.Connection -> IO ()
 requestResponse stateMVar conn = do
   putStrLn "waiting for message from client..."
   msg <- WS.receiveData conn :: IO Text
   putStrLn $ "Received message: " ++ T.unpack msg
+  -- TODO: fork ?
   request <- parseRequest msg
   response <- modifyMVar stateMVar $ \state ->
     handleRequest state request
@@ -54,6 +57,15 @@ requestResponse stateMVar conn = do
 --- Example problems ---
 ------------------------
 
+data GetExampleProblemsRequest = GetExampleProblemsRequest
+  deriving (Generic, Show)
+
+data ExampleProblemsResponse = ExampleProblemsResponse
+  { problems :: Map.Map String LPPProblem,
+    boxes :: BoxStore
+  }
+  deriving (Generic)
+
 instance IsRequestResponse GetExampleProblemsRequest where
   type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
   handleRequest state _ = do
@@ -63,19 +75,34 @@ instance IsRequestResponse GetExampleProblemsRequest where
     let newState = ServerState.addBoxes scopes $ ServerState.addForms problemForms state
     pure (newState, ExampleProblemsResponse {problems = problems, boxes = newState.boxes})
 
-data GetExampleProblemsRequest = GetExampleProblemsRequest
+instance A.FromJSON GetExampleProblemsRequest where
+  parseJSON = A.genericParseJSON A.defaultOptions { A.tagSingleConstructors = True }
+
+instance A.ToJSON ExampleProblemsResponse where
+  toEncoding = A.genericToEncoding A.defaultOptions
+
+--------------------------------
+--- Formula/expression nodes ---
+--------------------------------
+
+data GetAllFormulaNodesRequest = GetAllFormulaNodesRequest
   deriving (Generic, Show)
 
-instance A.FromJSON GetExampleProblemsRequest where
-  parseJSON = A.withObject "GetExampleProblemsRequest" $ \_ -> pure GetExampleProblemsRequest
-
-data ExampleProblemsResponse = ExampleProblemsResponse
-  { problems :: Map.Map String LPPProblem,
-    boxes :: BoxStore
+data FormulaNodesResponse = FormulaNodesResponse
+  { exprs :: ExprStore,
+    forms :: FormStore
   }
   deriving (Generic)
 
-instance A.ToJSON ExampleProblemsResponse where
+instance IsRequestResponse GetAllFormulaNodesRequest where
+  type ResponseType GetAllFormulaNodesRequest = FormulaNodesResponse
+  handleRequest state _ = do
+    pure (state, FormulaNodesResponse {exprs = state.exprs, forms = state.forms})
+
+instance A.FromJSON GetAllFormulaNodesRequest where
+  parseJSON = A.genericParseJSON A.defaultOptions { A.tagSingleConstructors = True }
+
+instance A.ToJSON FormulaNodesResponse where
   toEncoding = A.genericToEncoding A.defaultOptions
 
 ------------------------------------------------
@@ -89,12 +116,12 @@ class IsRequestResponse request where
 
 data Request
   = RequestGetExampleProblems GetExampleProblemsRequest
-  | RequestTODO
+  | RequestGetAllFormulaNodes GetAllFormulaNodesRequest
   deriving (Generic)
 
 data Response
   = ResponseExampleProblems ExampleProblemsResponse
-  | ResponseTODO
+  | ResponseFormulaNodes FormulaNodesResponse
   deriving (Generic)
 
 instance IsRequestResponse Request where
@@ -102,8 +129,9 @@ instance IsRequestResponse Request where
   handleRequest state (RequestGetExampleProblems req) = do
     (newState, resp) <- handleRequest state req
     pure (newState, ResponseExampleProblems resp)
-  handleRequest state RequestTODO =
-    pure (state, ResponseTODO)
+  handleRequest state (RequestGetAllFormulaNodes req) = do
+    (newState, resp) <- handleRequest state req
+    pure (newState, ResponseFormulaNodes resp)
 
 parseRequest :: Text -> IO Request
 parseRequest msg =
@@ -112,13 +140,16 @@ parseRequest msg =
         Right req -> do
           putStrLn $ "Parsed GetExampleProblemsRequest: " ++ show req
           return (RequestGetExampleProblems req)
-        Left _err1 -> do
-          -- case A.eitherDecodeStrict msgBS of
-          --   Right req -> do
-          --     return RequestTODO
-          --   Left err2 -> do
-          putStrLn "Failed to parse request"
-          fail "Invalid request"
+        Left err1 -> do
+          case A.eitherDecodeStrict msgBS of
+            Right req -> do
+              putStrLn $ "Parsed GetAllFormulaNodesRequest: " ++ show req
+              return (RequestGetAllFormulaNodes req)
+            Left err2 -> do
+              putStrLn "Failed to parse request"
+              putStrLn $ "Error parsing as GetExampleProblemsRequest: " ++ err1
+              putStrLn $ "Error parsing as GetAllFormulaNodesRequest: " ++ err2
+              fail "Invalid request"
 
 instance A.ToJSON Response where
   toEncoding = A.genericToEncoding A.defaultOptions
