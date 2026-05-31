@@ -16,8 +16,7 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import GHC.Generics (Generic)
 import GHC.Records
-import LPPaver2.BranchAndPrune (LPPProblem)
-import LPPaver2.ExampleProblems (exampleProblems)
+import LPPaver2.ExampleProblems (exampleProblems, LPPProblemWithParamSpec(..))
 import LPPaver2.Export ()
 import LPPaver2.RealConstraints (ExprStore, FormStore)
 import LPPaver2.RealConstraints.Boxes (BoxStore)
@@ -61,7 +60,7 @@ data GetExampleProblemsRequest = GetExampleProblemsRequest
   deriving (Generic, Show)
 
 data ExampleProblemsResponse = ExampleProblemsResponse
-  { problems :: Map.Map String LPPProblem,
+  { problems :: Map.Map String LPPProblemWithParamSpec,
     boxes :: BoxStore
   }
   deriving (Generic)
@@ -69,9 +68,9 @@ data ExampleProblemsResponse = ExampleProblemsResponse
 instance IsRequestResponse GetExampleProblemsRequest where
   type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
   handleRequest state _ = do
-    let problems = exampleProblems 0
-    let scopes = map (\p -> p.scope) $ Map.elems problems
-    let problemForms = map (\p -> p.constraint) $ Map.elems problems
+    let problems = exampleProblems
+    let scopes = map (\p -> p.problem.scope) $ Map.elems problems
+    let problemForms = map (\p -> p.problem.constraint) $ Map.elems problems
     let newState = ServerState.addBoxes scopes $ ServerState.addForms problemForms state
     pure (newState, ExampleProblemsResponse {problems = problems, boxes = newState.boxes})
 

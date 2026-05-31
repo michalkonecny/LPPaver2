@@ -16,7 +16,7 @@
 
   watch(selectedProblem, (newProblem) => {
     if (newProblem) {
-      stepsStore.setProblem(newProblem);
+      stepsStore.setProblem(newProblem.problem);
     }
   });
 </script>

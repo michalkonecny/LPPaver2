@@ -7,8 +7,13 @@ import type { Box, BoxHash } from '@/boxes/boxes';
 import { exprHashToExpr, type Expr, type ExprF, type ExprHash } from '@/formulas/exprs';
 import { formHashToForm, type Form, type FormF, type FormHash } from '@/formulas/forms';
 
+export type ProblemWithParamSpec = {
+  problem: Problem;
+  paramSpec: [string, [number, number]][];
+};
+
 export const useProverStore = defineStore('prover', () => {
-  const exampleProblems: Ref<Record<string, Problem>> = ref({});
+  const exampleProblems: Ref<Record<string, ProblemWithParamSpec>> = ref({});
   const boxes: Ref<Record<BoxHash, Box>> = ref({});
   const exprs: Ref<Record<ExprHash, ExprF<ExprHash>>> = ref({});
   const forms: Ref<Record<FormHash, FormF<ExprHash, FormHash>>> = ref({});
@@ -95,7 +100,7 @@ type ProverMessage =
   | {
       tag: 'ResponseExampleProblems';
       contents: {
-        problems: Record<string, Problem>;
+        problems: Record<string, ProblemWithParamSpec>;
         boxes: Record<BoxHash, Box>;
       };
     }
