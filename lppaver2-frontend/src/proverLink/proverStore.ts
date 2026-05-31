@@ -9,7 +9,14 @@ import { formHashToForm, type Form, type FormF, type FormHash } from '@/formulas
 
 export type ProblemWithParamSpec = {
   problem: Problem;
-  paramSpec: [string, [number, number]][];
+  paramSpecs: ParamSpec[];
+};
+
+export type ParamSpec = {
+  paramName: string;
+  defaultValue: number;
+  minValue: number;
+  maxValue: number;
 };
 
 export const useProverStore = defineStore('prover', () => {

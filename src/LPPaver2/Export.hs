@@ -18,7 +18,7 @@ import Data.Text.Lazy.Builder qualified as B
 import Data.Text.Lazy.Builder.Int qualified as B
 import GHC.Records (getField)
 import LPPaver2.BranchAndPrune (LPPPaving, LPPProblem)
-import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..))
+import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), ParamSpec (..))
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
 
@@ -133,6 +133,21 @@ lppProblemToJSON (BP.Problem {scope, constraint}) =
 
 instance A.ToJSON LPPProblemWithParamSpec where
   toEncoding = A.genericToEncoding A.defaultOptions
+
+instance A.ToJSON ParamSpec where
+  toJSON = paramSpecToJSON
+
+paramSpecToJSON :: ParamSpec -> A.Value
+paramSpecToJSON (ParamSpec {paramName, defaultValue, minValue, maxValue}) =
+  A.object
+    [ "paramName" .= paramName,
+      "defaultValue" .= rationalToDouble defaultValue,
+      "minValue" .= rationalToDouble minValue,
+      "maxValue" .= rationalToDouble maxValue
+    ]
+
+rationalToDouble :: Rational -> Double
+rationalToDouble = realToFrac
 
 instance A.ToJSON LPPPaving where
   toJSON = lppPavingToJSON

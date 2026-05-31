@@ -3,18 +3,31 @@
 
 {-# HLINT ignore "Use >" #-}
 
-module LPPaver2.ExampleProblems (exampleProblems, LPPProblemWithParamSpec(..)) where
+module LPPaver2.ExampleProblems
+  ( exampleProblems,
+    LPPProblemWithParamSpec (..),
+    ParamSpec (..),
+  )
+where
 
 import BranchAndPrune.BranchAndPrune (Problem (..))
 import Data.Map qualified as Map
+import GHC.Generics (Generic)
 import LPPaver2.BranchAndPrune (LPPProblem)
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
-import GHC.Generics (Generic)
 
 data LPPProblemWithParamSpec = LPPProblemWithParamSpec
   { problem :: LPPProblem,
-    paramSpec :: [(String, (Rational, Rational))]
+    paramSpecs :: [ParamSpec]
+  }
+  deriving (Generic)
+
+data ParamSpec = ParamSpec
+  { paramName :: String,
+    defaultValue :: Rational,
+    minValue :: Rational,
+    maxValue :: Rational
   }
   deriving (Generic)
 
@@ -22,22 +35,29 @@ noParams :: LPPProblem -> LPPProblemWithParamSpec
 noParams prob =
   LPPProblemWithParamSpec
     { problem = prob,
-      paramSpec = []
+      paramSpecs = []
     }
 
 epsParam :: LPPProblem -> LPPProblemWithParamSpec
 epsParam prob =
   LPPProblemWithParamSpec
     { problem = prob,
-      paramSpec = [("eps", (0.0, 1.0))]
+      paramSpecs =
+        [ ParamSpec
+            { paramName = "eps",
+              defaultValue = 0.1,
+              minValue = 0.0,
+              maxValue = 1.0
+            }
+        ]
     }
 
 exampleProblems :: Map.Map String LPPProblemWithParamSpec
 exampleProblems =
   Map.fromList
     [ ( "transitivityEps",
-        epsParam $
-          Problem
+        epsParam
+          $ Problem
             { scope = mkBox [("x", (0.0, 2.0)), ("y", (0.0, 2.0)), ("z", (0.0, 2.0))],
               constraint = (((x + eps) <= y) && (y <= z)) `formImpl` (x <= z)
             }
@@ -57,15 +77,15 @@ exampleProblems =
             }
       ),
       ( "circleEps",
-        epsParam $
-          Problem
+        epsParam
+          $ Problem
             { scope = mkBox [("x", (0.0, 1.0)), ("y", (0.0, 1.0))],
               constraint = (x * x + y * y <= 1.0) `formImpl` (x * x + y * y <= 1.0 + eps)
             }
       ),
       ( "circleEpsSqrt",
-        epsParam $
-          Problem
+        epsParam
+          $ Problem
             { scope = mkBox [("x", (0.0, 1.0)), ("y", (0.0, 1.0))],
               constraint = (sqrt (x * x + y * y) <= 1.0) || (sqrt (x * x + y * y) > 1.0 + eps)
             }
@@ -78,15 +98,15 @@ exampleProblems =
             }
       ),
       ( "cubicReduction",
-        epsParam $
-          Problem
+        epsParam
+          $ Problem
             { scope = mkBox [("x", (-1.0, 1.0)), ("y", (-1.0, 1.0))],
               constraint = 6.0 * x * x * x + x * x - 10.0 * x + 3.0 + y <= (x - 1.0) * (x - 4.5) + y + eps
             }
       ),
       ( "vcApproxSinLE",
-        epsParam $
-          Problem
+        epsParam
+          $ Problem
             { scope = mkBox [("r1", ((-3819831) / 4194304, 7639661 / 8388608)), ("x", ((-6851933) / 8388608, 6851933 / 8388608))],
               constraint =
                 let t =
