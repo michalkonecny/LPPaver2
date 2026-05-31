@@ -1,5 +1,6 @@
 import type { Boxes, BoxHash } from '@/boxes/boxes';
 import type { EvalInfo } from '@/formulas/evalInfo';
+import type { Kleenean } from '@/formulas/kleenean';
 import type { Problem } from '@/problems/problems';
 
 export type Step = InitStep | ProgressStep | GiveUpOnProblemStep | AbortStep | DoneStep;
@@ -55,5 +56,22 @@ export function getSubProblems(step: Step): Problem[] {
       return [...step.progressPaving.undecided];
     default:
       return [];
+  }
+}
+
+export function getStepTruthResult(step: Step): Kleenean {
+  switch (step.tag) {
+    case 'ProgressStep':
+      const stepScope = step.problem.scope;
+      const inner = step.progressPaving.inner;
+      const outer = step.progressPaving.outer;
+
+      // check if the pruned paving's inner or outer cover the whole step scope
+      if (inner && inner.boxes[0] == stepScope) return 'CertainTrue';
+      if (outer && outer.boxes[0] == stepScope) return 'CertainFalse';
+
+      return 'TrueOrFalse';
+    default:
+      return 'TrueOrFalse';
   }
 }

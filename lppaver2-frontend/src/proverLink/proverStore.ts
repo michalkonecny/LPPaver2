@@ -1,35 +1,42 @@
 import { defineStore } from 'pinia';
-import { ref, type Ref } from 'vue';
+import { readonly, ref, watch, type Ref } from 'vue';
 import _ from 'lodash';
 import { getProverWS } from './proverWS';
 import type { Problem } from '@/problems/problems';
 import type { Box, BoxHash } from '@/boxes/boxes';
-import type { ExprF, ExprHash } from '@/formulas/exprs';
-import type { FormF, FormHash } from '@/formulas/forms';
+import { exprHashToExpr, type Expr, type ExprF, type ExprHash } from '@/formulas/exprs';
+import { formHashToForm, type Form, type FormF, type FormHash } from '@/formulas/forms';
 
 export const useProverStore = defineStore('prover', () => {
-  const exampleProblems: Ref<Problem[]> = ref([]);
+  const exampleProblems: Ref<Record<string, Problem>> = ref({});
   const boxes: Ref<Record<BoxHash, Box>> = ref({});
   const exprs: Ref<Record<ExprHash, ExprF<ExprHash>>> = ref({});
   const forms: Ref<Record<FormHash, FormF<ExprHash, FormHash>>> = ref({});
 
   const exports = {
-    exampleProblems,
-    boxes,
-    exprs,
-    forms,
-    requestExampleProblems,
-    requestAllFormulaNodes,
+    exampleProblems: readonly(exampleProblems) as typeof exampleProblems,
+    getBox,
+    getExpr,
+    getForm,
   };
 
-  async function requestExampleProblems() {
-    const ws = await getProverWS();
-    ws.send(JSON.stringify('GetExampleProblemsRequest'));
+  function getExpr(exprHash: ExprHash): Expr {
+    return exprHashToExpr(exprHash, exprs.value);
   }
 
-  async function requestAllFormulaNodes() {
-    const ws = await getProverWS();
-    ws.send(JSON.stringify('GetAllFormulaNodesRequest'));
+  function getForm(formHash: FormHash): Form {
+    return formHashToForm(formHash, forms.value, exprs.value);
+  }
+
+  function getBox(boxHash: BoxHash): Box {
+    const box = boxes.value[boxHash];
+    if (!box) {
+      console.log(`boxes.value = `, boxes.value);
+      console.log(`typeof(boxHash) = `, typeof boxHash);
+
+      throw new Error(`Box with hash ${boxHash} not found`);
+    }
+    return box;
   }
 
   //////////////////////////////////////////
@@ -63,6 +70,24 @@ export const useProverStore = defineStore('prover', () => {
   // start watching for messages from the prover backend
   _watchProverMessages();
 
+  /////////////////////////
+  // initialise the store
+  /////////////////////////
+
+  // whenever exampleProblems is assigned, request all formula nodes
+  watch(exampleProblems, async () => {
+    const ws = await getProverWS();
+    ws.send(JSON.stringify('GetAllFormulaNodesRequest'));
+  });
+
+  // request example problems on store initialisation
+  requestExampleProblems();
+
+  async function requestExampleProblems() {
+    const ws = await getProverWS();
+    ws.send(JSON.stringify('GetExampleProblemsRequest'));
+  }
+
   return exports;
 });
 
@@ -70,7 +95,7 @@ type ProverMessage =
   | {
       tag: 'ResponseExampleProblems';
       contents: {
-        problems: Problem[];
+        problems: Record<string, Problem>;
         boxes: Record<BoxHash, Box>;
       };
     }

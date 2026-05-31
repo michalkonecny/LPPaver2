@@ -2,7 +2,8 @@
   import Plotly, { type ColorScale } from 'plotly.js-dist-min';
   import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
   import _ from 'lodash';
-  import { getTruthColour, useStepsStore } from '@/steps/stepsStore';
+  import { useStepsStore } from '@/steps/stepsStore';
+  import { useProverStore } from '@/proverLink/proverStore';
   import { pickXY, type Box, type Var } from '@/boxes/boxes';
   import { decomposeBinaryComp, type Form, type FormOrExprHash } from '../formulas/forms';
   import { getExprVarExprs, type Expr } from '../formulas/exprs';
@@ -17,6 +18,8 @@
   } from '../formulas/evalInfo';
   import { getKleeneanColourscale } from './kleeneanColourscale';
 
+  const proverStore = useProverStore();
+
   const props = defineProps<{
     formOrExprHash: FormOrExprHash | undefined;
     box: Box | undefined;
@@ -30,7 +33,7 @@
     if (!rootProblem) {
       return undefined;
     }
-    return useStepsStore().getBox(rootProblem.scope);
+    return proverStore.getBox(rootProblem.scope);
   });
 
   const xVar = ref<Var>('_x');
@@ -134,14 +137,14 @@
     if (!props.formOrExprHash || props.formOrExprHash.type !== 'form') {
       return undefined;
     }
-    return useStepsStore().getForm(props.formOrExprHash.formHash);
+    return proverStore.getForm(props.formOrExprHash.formHash);
   });
 
   const expr = computed(() => {
     if (!props.formOrExprHash || props.formOrExprHash.type !== 'expr') {
       return undefined;
     }
-    return useStepsStore().getExpr(props.formOrExprHash.exprHash);
+    return proverStore.getExpr(props.formOrExprHash.exprHash);
   });
 
   const comparison = computed(() => (form.value ? decomposeBinaryComp(form.value) : {}));

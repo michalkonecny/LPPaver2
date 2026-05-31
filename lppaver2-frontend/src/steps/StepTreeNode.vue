@@ -2,8 +2,9 @@
   import { storeToRefs } from 'pinia';
   import { computed, ref, watch } from 'vue';
   import { useStepsStore } from './stepsStore';
-  import { getSubProblems } from './steps';
+  import { getStepTruthResult, getSubProblems } from './steps';
   import { sameProblem, type Problem } from '@/problems/problems';
+  import { getStepColour } from '@/styling';
 
   const props = defineProps<{
     problem: Problem;
@@ -15,7 +16,7 @@
 
   const step = stepsStore.stepFromProblem(props.problem);
 
-  const stepTruth = stepsStore.getStepTruthResult(step);
+  const stepTruth = getStepTruthResult(step);
 
   const stepTruthNote =
     stepTruth === 'CertainTrue' ? ' (True)' : stepTruth === 'CertainFalse' ? ' (False)' : '';
@@ -80,7 +81,7 @@
   <table
     ref="el"
     :class="classes"
-    :style="`background-color: ${stepsStore.getStepColour(step)};`"
+    :style="`background-color: ${getStepColour(step)};`"
     @click="focusHere"
     @dblclick="zoomHere"
   >

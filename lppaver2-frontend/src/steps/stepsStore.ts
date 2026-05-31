@@ -1,27 +1,12 @@
 import { defineStore } from 'pinia';
-import { useProverStore } from '@/proverLink/proverStore';
-import type { Kleenean } from '@/formulas/kleenean';
 import type { ExprValue } from '@/formulas/evalInfo';
-import type { Box, BoxHash } from '@/boxes/boxes';
 import { problemToProblemHash, type Problem, type ProblemHash } from '@/problems/problems';
-import { type ExprHash, type Expr, type ExprF, exprHashToExpr } from '../formulas/exprs';
-import {
-  formHashToForm,
-  type Form,
-  type FormF,
-  type FormHash,
-  type FormOrExprHash,
-} from '../formulas/forms';
-import { getStepProblem, type Step } from './steps';
-import { watch } from 'vue';
+import { type ExprHash } from '../formulas/exprs';
+import { type FormOrExprHash } from '../formulas/forms';
+import { type Step } from './steps';
 
 export const useStepsStore = defineStore('steps', {
   state: () => ({
-    proverStore: useProverStore(),
-    sessionRef: null as string | null,
-    boxes: {} as Record<BoxHash, Box>,
-    exprs: {} as Record<ExprHash, ExprF<ExprHash>>,
-    forms: {} as Record<FormHash, FormF<ExprHash, FormHash>>,
     steps: [] as Step[],
     numberOfSteps: 0, // keep steps separately to make it easier to define reactive dependencies
     _problem2step: {} as Record<ProblemHash, Step>,
@@ -31,60 +16,14 @@ export const useStepsStore = defineStore('steps', {
     zoomedProblem: null as Problem | null,
   }),
   actions: {
-    async initSession(sessionRef: string) {
-      watch(
-        () => this.proverStore.exampleProblems,
-        () => {
-          this.proverStore.requestAllFormulaNodes();
-        },
-      );
-      await this.proverStore.requestExampleProblems();
-
-      this.sessionRef = sessionRef;
-      // fetch boxes from redis
-      const boxes = await fetchWholeMap<Box>(sessionRef, 'boxes');
-      this.boxes = boxes;
-
-      // fetch exprs from redis
-      const exprs = await fetchWholeMap<ExprF<ExprHash>>(sessionRef, 'exprs');
-      this.exprs = exprs;
-
-      // fetch forms from redis
-      const forms = await fetchWholeMap<FormF<ExprHash, FormHash>>(sessionRef, 'forms');
-      this.forms = forms;
-
-      // fetch steps from redis
-      const steps = await fetchWholeList<Step>(sessionRef, 'steps');
-      this.steps = steps;
-      this.numberOfSteps = steps.length;
-
-      // populate the stepFromProblem map
-      steps.forEach((step) => {
-        const problem = getStepProblem(step);
-        if (!problem) return; // continue the loop if no problem
-        const problemHash = problemToProblemHash(problem);
-        this._problem2step[problemHash] = step;
-      });
-
-      this.rootProblem = steps[0] ? getStepProblem(steps[0]) : null;
-      this.zoomedProblem = this.rootProblem;
-      this.focusedProblem = this.rootProblem;
-    },
-    getExpr(exprHash: ExprHash): Expr {
-      return exprHashToExpr(exprHash, this.exprs);
-    },
-    getForm(formHash: FormHash): Form {
-      return formHashToForm(formHash, this.forms, this.exprs);
-    },
-    getBox(boxHash: BoxHash): Box {
-      const box = this.boxes[boxHash];
-      if (!box) {
-        console.log(`this.boxes = `, this.boxes);
-        console.log(`typeof(boxHash) = `, typeof boxHash);
-
-        throw new Error(`Box with hash ${boxHash} not found`);
-      }
-      return box;
+    async setProblem(problem: Problem) {
+      const problemHash = problemToProblemHash(problem);
+      const step: Step = { tag: 'GiveUpOnProblemStep', problem };
+      this.steps.push(step);
+      this._problem2step[problemHash] = step;
+      this.rootProblem = problem;
+      this.zoomedProblem = problem;
+      this.focusedProblem = problem;
     },
     stepFromProblem(p: Problem) {
       const problemHash = problemToProblemHash(p);
@@ -93,31 +32,6 @@ export const useStepsStore = defineStore('steps', {
         throw new Error(`Step not found for problem hash ${problemHash}`);
       }
       return step;
-    },
-    getStepTruthResult(step: Step): Kleenean {
-      switch (step.tag) {
-        case 'ProgressStep':
-          const stepScope = step.problem.scope;
-          const inner = step.progressPaving.inner;
-          const outer = step.progressPaving.outer;
-
-          // check if the pruned paving's inner or outer cover the whole step scope
-          if (inner && inner.boxes[0] == stepScope) return 'CertainTrue';
-          if (outer && outer.boxes[0] == stepScope) return 'CertainFalse';
-
-          return 'TrueOrFalse';
-        default:
-          return 'TrueOrFalse';
-      }
-    },
-    getStepColour(step: Step) {
-      if (step.tag === 'GiveUpOnProblemStep') {
-        return '#ffffff';
-        // return "#f0b0f0";
-      }
-
-      const truthResult = this.getStepTruthResult(step);
-      return getTruthColour(truthResult);
     },
   },
   getters: {
@@ -129,62 +43,3 @@ export const useStepsStore = defineStore('steps', {
     },
   },
 });
-
-export function getTruthColour(kleenean: Kleenean): string {
-  switch (kleenean) {
-    case 'CertainTrue':
-      return '#e0ffe0';
-    case 'CertainFalse':
-      return '#ffd0e0';
-    case 'TrueOrFalse':
-      return '#e0e0ff';
-  }
-}
-
-const keyPrefix = 'lppaver2';
-const wedisURLbase = 'http://127.0.0.1:7379';
-
-function getSessionKeyPrefix(sessionRef: string) {
-  return `${keyPrefix}:${sessionRef}`;
-}
-
-async function fetchWholeMap<ValueType>(sessionRef: string, hashKey: string) {
-  const key = `${getSessionKeyPrefix(sessionRef)}:${hashKey}`;
-  const response = await fetch(`${wedisURLbase}/HGETALL/${key}`).catch(() => {
-    throw new Error(`Failed to fetch hash ${hashKey} from redis`);
-  });
-
-  // parse response
-  const data = await response.json();
-  // check response contains HGETALL field with an object value
-  if (!('HGETALL' in data) || typeof data.HGETALL !== 'object') {
-    throw new Error('Invalid response from redis when fetching a hash');
-  }
-  // parse the values as ValueType
-  const hgetallResult = data.HGETALL as Record<string, string>;
-  const values = Object.fromEntries(
-    Object.entries(hgetallResult).map(([valueHash, value]: [string, string]) => [
-      valueHash,
-      JSON.parse(value) as ValueType,
-    ]),
-  );
-  return values as Record<string, ValueType>;
-}
-
-async function fetchWholeList<ValueType>(sessionRef: string, listKey: string) {
-  const key = `${getSessionKeyPrefix(sessionRef)}:${listKey}`;
-  const response = await fetch(`${wedisURLbase}/LRANGE/${key}/0/-1`).catch(() => {
-    throw new Error(`Failed to fetch list ${listKey} from redis`);
-  });
-
-  // parse response
-  const data = await response.json();
-  // check response contains LRANGE field with an array value
-  if (!('LRANGE' in data) || !Array.isArray(data.LRANGE)) {
-    throw new Error('Invalid response from redis when fetching a list');
-  }
-  // parse the values as ValueType
-  const lrangeResult = data.LRANGE as string[];
-  const values = lrangeResult.map((value) => JSON.parse(value) as ValueType);
-  return values;
-}

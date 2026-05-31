@@ -1,4 +1,4 @@
-import { getTruthColour } from '@/steps/stepsStore';
+import { getTruthColour } from '@/styling';
 
 export function getKleeneanColourscale(
   intensity: number[],

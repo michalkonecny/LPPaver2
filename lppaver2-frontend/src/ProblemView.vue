@@ -5,6 +5,7 @@
   import FormattedForm from './formulas/FormattedForm.vue';
   import BoxVarsShow from './boxes/BoxVarsShow.vue';
   import type { Problem } from './problems/problems';
+  import { useProverStore } from './proverLink/proverStore.ts';
 
   const props = defineProps<{
     problem: Problem | null;
@@ -16,15 +17,16 @@
   }>();
 
   const stepsStore = useStepsStore();
+  const proverStore = useProverStore();
 
   const box = computed(() => {
     const scope = props.problem?.scope;
-    return scope ? stepsStore.getBox(scope) : undefined;
+    return scope ? proverStore.getBox(scope) : undefined;
   });
 
   const form = computed(() => {
     const formHash = props.problem?.constraint;
-    return formHash ? stepsStore.getForm(formHash) : undefined;
+    return formHash ? proverStore.getForm(formHash) : undefined;
   });
 
   const formValues = computed(() => {

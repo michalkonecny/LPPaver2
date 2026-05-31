@@ -4,11 +4,13 @@
   import Plotly from 'plotly.js-dist-min';
 
   import { getSubProblems, type Step } from '@/steps/steps';
-  import { getTruthColour, useStepsStore } from '@/steps/stepsStore';
+  import { useProverStore } from '@/proverLink/proverStore';
+  import { useStepsStore } from '@/steps/stepsStore';
   import type { Interval } from '@/formulas/evalInfo';
   import type { Kleenean } from '@/formulas/kleenean';
   import type { Problem } from '@/problems/problems';
   import { pickXY, type BoxHash, type Var } from '@/boxes/boxes';
+  import { getTruthColour } from '@/styling';
 
   const props = withDefaults(
     defineProps<{
@@ -21,13 +23,14 @@
   );
 
   const stepsStore = useStepsStore();
+  const proverStore = useProverStore();
   const { focusedProblem } = storeToRefs(stepsStore);
 
   const plotDiv = ref<Plotly.PlotlyHTMLElement | null>(null);
 
   const topScopeH = computed(() => props.topProblem?.scope ?? null);
   const topScopeBox = computed(() =>
-    !topScopeH.value ? null : stepsStore.getBox(topScopeH.value),
+    !topScopeH.value ? null : proverStore.getBox(topScopeH.value),
   );
   // const topScopeVarDomains = computed(() => topScopeBox.value?.varDomains ?? {});
   const topScopeVars = computed(() => topScopeBox.value?.box_.splitOrder ?? []);
@@ -74,7 +77,7 @@
         : [problem.scope, 'TrueOrFalse'];
 
     // get this problem's scope shape
-    const box = stepsStore.getBox(stepBoxH);
+    const box = proverStore.getBox(stepBoxH);
     const varDomains = box.box_.varDomains;
     const xDomain = varDomains[xVar.value];
     const yDomain = varDomains[yVar.value];
@@ -137,7 +140,7 @@
       return [];
     }
 
-    const box = stepsStore.getBox(focusedProblem.value.scope);
+    const box = proverStore.getBox(focusedProblem.value.scope);
     const varDomains = box.box_.varDomains;
     const outline: Partial<Plotly.Shape> = {
       type: 'rect',

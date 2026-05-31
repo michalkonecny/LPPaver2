@@ -1,7 +1,7 @@
 <script lang="ts" setup>
   import _ from 'lodash';
   import { computed, ref, watch, type StyleValue } from 'vue';
-  import { getTruthColour } from '@/steps/stepsStore';
+  import { getTruthColour } from '@/styling.ts';
   import {
     binaryCompSymbolMap,
     binaryConnSymbolMap,

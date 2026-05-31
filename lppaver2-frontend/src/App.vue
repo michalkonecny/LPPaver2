@@ -3,54 +3,63 @@
   import { storeToRefs } from 'pinia';
   import { GridLayout, GridItem, type LayoutItem } from 'grid-layout-plus';
   import { useStepsStore } from './steps/stepsStore';
+  import { useProverStore } from './proverLink/proverStore.ts';
   import { type FormOrExprHash } from './formulas/forms';
   import Paving2D from './paving2D/Paving2D.vue';
   import StepTree from './steps/StepTree.vue';
   import ProblemView from './ProblemView.vue';
   import FormExprPlot from './formulaExpPlot/FormExprPlot.vue';
+  import Params from './Params.vue';
 
   const stepStore = useStepsStore();
+  const proverStore = useProverStore();
   const { focusedProblem, focusedProblemSubFormExpr, focusedExprValues } = storeToRefs(stepStore);
-
-  stepStore.initSession('default');
 
   const focusedScopeH = computed(() => focusedProblem.value?.scope ?? null);
   const focusedScopeBox = computed(() =>
-    !focusedScopeH.value ? null : stepStore.getBox(focusedScopeH.value),
+    !focusedScopeH.value ? null : proverStore.getBox(focusedScopeH.value),
   );
 
   const viewHeight = computed(() => window.innerHeight - 100);
 
+  const paramsLayout = reactive<LayoutItem>({
+    i: 'params',
+    x: 0,
+    y: 0,
+    w: 12,
+    h: 1,
+  });
   const stepTreeLayout = reactive<LayoutItem>({
     i: 'stepTree',
     x: 0,
-    y: 0,
+    y: 1,
     w: 6,
     h: 3,
   });
   const paving2DLayout = reactive<LayoutItem>({
     i: 'paving2D',
     x: 0,
-    y: 3,
+    y: 4,
     w: 6,
     h: 5,
   });
   const focusedPLayout = reactive<LayoutItem>({
     i: 'focusedP',
     x: 6,
-    y: 0,
+    y: 1,
     w: 6,
     h: 3,
   });
   const focEPlotLayout = reactive<LayoutItem>({
     i: 'focEPlot',
     x: 6,
-    y: 3,
+    y: 4,
     w: 6,
     h: 5,
   });
 
   const layout = reactive<LayoutItem[]>([
+    paramsLayout,
     stepTreeLayout,
     paving2DLayout,
     focusedPLayout,
@@ -72,6 +81,17 @@
     :responsive="false"
     :useCssTransforms="true"
   >
+    <GridItem
+      key="params"
+      i="params"
+      :x="paramsLayout.x"
+      :y="paramsLayout.y"
+      :w="paramsLayout.w"
+      :h="paramsLayout.h"
+      :isDraggable="false"
+    >
+      <div class="border w-100 h-100" style="overflow-y: auto"><Params /></div>
+    </GridItem>
     <GridItem
       key="stepTree"
       i="stepTree"
