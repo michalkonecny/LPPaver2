@@ -1,7 +1,5 @@
 module LPPaver2.SimplexPrune
   ( simplexPrune,
-    exprValuesToRationalBounds,
-    mpBallToRationalBounds,
   )
 where
 
@@ -39,14 +37,6 @@ import AERN2.MP qualified as MP
 import Linear.Simplex.Solver.TwoPhase qualified as Simplex
 import Linear.Simplex.Types qualified as ST
 
-
--- Helper to create Rational literals, since MixedTypesNumPrelude makes numeric literals Integer
-rat :: Integer -> Rational
-rat n = n % 1
-
-toInt :: Integer -> Int
-toInt = fromIntegral
-
 -- | A linear decomposition of an expression.
 --
 -- Represents: (sum of coefficients * variables) + constant + nonLinearRemainder
@@ -60,21 +50,19 @@ data Decomposition = Decomposition -- TODO: why do we need this?
     nlUpper :: Rational
   }
 
-data Interval = Interval {lower :: Rational, upper :: Rational}
-
 emptyDecomp :: Decomposition
 emptyDecomp =
   Decomposition
     { coefficients = Map.empty,
-      constant = rat 0,
-      nlLower = rat 0,
-      nlUpper = rat 0
+      constant = rational 0,
+      nlLower = rational 0,
+      nlUpper = rational 0
     }
 
 -- | A purely linear decomposition (no non-linear remainder).
 linearVar :: Var -> Decomposition
 linearVar v =
-  emptyDecomp {coefficients = Map.singleton v (rat 1)}
+  emptyDecomp {coefficients = Map.singleton v (rational 1)}
 
 linearConst :: Rational -> Decomposition
 linearConst c = emptyDecomp {constant = c}
@@ -107,7 +95,7 @@ subDecomps d1 d2 = addDecomps d1 (negateDecomp d2)
 
 scaleDecomp :: Rational -> Decomposition -> Decomposition
 scaleDecomp c d
-  | c P.>= rat 0 =
+  | c >= 0 =
       Decomposition
         { coefficients = Map.map (P.* c) d.coefficients,
           constant = d.constant P.* c,
@@ -153,6 +141,7 @@ decomposeExpr exprNodes exprBounds = go
               (Just (ExprLit {lit}), _) -> scaleDecomp lit (go e2)
               (_, Just (ExprLit {lit})) -> scaleDecomp lit (go e1)
               _otherwise -> fallback eH
+          _otherwise -> fallback eH
 
     -- TODO: better name, it gets bounds for nl expr
     fallback :: ExprHash -> Decomposition
@@ -161,27 +150,13 @@ decomposeExpr exprNodes exprBounds = go
         Just (lo, hi) -> nonLinearTerm lo hi
         Nothing -> emptyDecomp -- shouldn't happen if evaluation is complete TODO: error out!
 
--- | Convert evaluated expression values (type r) to rational interval bounds.
--- Takes a conversion function that turns an r value into (lower, upper) rational bounds.
-exprValuesToRationalBounds ::
-  (r -> (Rational, Rational)) ->
-  Map.Map ExprHash r ->
-  Map.Map ExprHash (Rational, Rational)
-exprValuesToRationalBounds toBounds = Map.map toBounds
-
--- | Convert an MPBall to rational bounds.
-mpBallToRationalBounds :: MP.MPBall -> (Rational, Rational)
-mpBallToRationalBounds ball =
-  let (lo, hi) = MP.endpoints ball
-   in (rational lo, rational hi)
-
 -- | Create a mapping from LPPaver2 variable names (String) to simplex variable IDs (Int).
 createVarMapping :: Box -> (Map.Map Var Int, Map.Map Int Var)
 createVarMapping box =
   let vars = Map.keys box.box_.varDomains
       -- FIXME: this may be used unsoundly!
-      varToInt = Map.fromList (P.zip vars (P.map toInt [1 ..]))
-      intToVar = Map.fromList (P.zip (P.map toInt [1 ..]) vars)
+      varToInt = Map.fromList (P.zip vars (P.map int [1 ..]))
+      intToVar = Map.fromList (P.zip (P.map int [1 ..]) vars)
    in (varToInt, intToVar)
 
 -- | Convert a linear decomposition constraint (lhs ≤ rhs) to a simplex PolyConstraint.
@@ -191,7 +166,7 @@ decompToSimplexConstraint ::
   Map.Map Var Int ->
   Decomposition ->
   Decomposition ->
-  P.Maybe ST.PolyConstraint
+  Maybe ST.PolyConstraint
 decompToSimplexConstraint varToInt d1 d2 =
   let diff = subDecomps d1 d2
    in if not (hasLinearTerms diff)
@@ -199,11 +174,10 @@ decompToSimplexConstraint varToInt d1 d2 =
         else
           let lhsMap =
                 Map.fromList
-                  [ (intVar, coeff)
-                    | (var, coeff) <- Map.toList diff.coefficients,
-                      Just intVar <- [Map.lookup var varToInt],
-                      coeff P./= rat 0
-                  ]
+                  [(intVar, coeff) |
+                     (var, coeff) <- Map.toList diff.coefficients,
+                     coeff /= 0,
+                     Just intVar <- [Map.lookup var varToInt]]
               rhs = P.negate diff.constant P.+ (diff.nlUpper P.- diff.nlLower)
               -- The constraint is: linear_part + nl_part ≤ 0
               -- → linear_part ≤ -nl_lower (since nl_part ≥ nl_lower)
@@ -272,7 +246,7 @@ simplexPrune ::
   Box ->
   Form ->
   Map.Map ExprHash (Rational, Rational) ->
-  m (P.Maybe LinearPruneResult)
+  m (Maybe LinearPruneResult)
 simplexPrune scope simplifiedForm exprBounds = do
   let (varToInt, intToVar) = createVarMapping scope
   let constraints = extractSimplexConstraints simplifiedForm.nodesE exprBounds varToInt simplifiedForm
@@ -287,8 +261,8 @@ simplexPrune scope simplifiedForm exprBounds = do
       let objectives =
             P.concatMap
               (\(_, intVar) ->
-                [ ST.Min {objective = Map.singleton intVar (rat 1)},
-                  ST.Max {objective = Map.singleton intVar (rat 1)}
+                [ ST.Min {objective = Map.singleton intVar (rational 1)},
+                  ST.Max {objective = Map.singleton intVar (rational 1)}
                 ]
               )
               vars
@@ -319,18 +293,18 @@ simplexPrune scope simplifiedForm exprBounds = do
 extractBoundsFromResults ::
   Map.Map Int Var ->
   [ST.ObjectiveResult] ->
-  Map.Map Var (P.Maybe Rational, P.Maybe Rational)
-extractBoundsFromResults intToVar objResults = P.foldl processResult Map.empty (P.zip (P.map toInt [0 ..]) objResults)
+  Map.Map Var (Maybe Rational, Maybe Rational)
+extractBoundsFromResults intToVar objResults = P.foldl processResult Map.empty (P.zip (P.map int [0 ..]) objResults)
   where
     vars = Map.toList intToVar
     processResult acc (idx, objResult) =
-      let varIdx = idx `P.div` toInt 2
+      let varIdx = idx `P.div` int 2
           isMin = P.even idx
        in case vars P.!! varIdx of
             (intVar, var) ->
               case objResult.outcome of
                 ST.Optimal {varValMap} ->
-                  let val = Map.findWithDefault (rat 0) intVar varValMap
+                  let val = Map.findWithDefault (rational 0) intVar varValMap
                       current = Map.findWithDefault (Nothing, Nothing) var acc
                    in if isMin
                         then Map.insert var (Just val, P.snd current) acc
@@ -340,8 +314,8 @@ extractBoundsFromResults intToVar objResults = P.foldl processResult Map.empty (
 -- | Apply new bounds to a box, returning a tighter box if there's improvement.
 applyNewBounds ::
   Box ->
-  Map.Map Var (P.Maybe Rational, P.Maybe Rational) ->
-  P.Maybe Box
+  Map.Map Var (Maybe Rational, Maybe Rational) ->
+  Maybe Box
 applyNewBounds scope newBounds
   | isImprovement =
       Just $

@@ -26,7 +26,7 @@ import Data.Map qualified as Map
 import GHC.Records
 import LPPaver2.LinearPrune (LinearPruneResult (..), linearPrune)
 import LPPaver2.RealConstraints
-import LPPaver2.SimplexPrune (exprValuesToRationalBounds, mpBallToRationalBounds, simplexPrune)
+import LPPaver2.SimplexPrune (simplexPrune)
 import MixedTypesNumPrelude
 import Text.Printf (printf)
 -- import Debug.Trace (trace)
@@ -226,12 +226,12 @@ instance
   (CanEval r, HasKleeneanComparison r, MonadIO m, ConvertibleExactly r MP.MPBall) =>
   BP.CanPrune m (WithSimplex r) Form Box Boxes (EvaluatedForm r)
   where
-  pruneProblemM (WithSimplex sampleR) (BP.Problem {scope, constraint}) = do
+  pruneProblemM (WithSimplex (sampleR :: r)) (BP.Problem {scope, constraint}) = do
     let simplificationResult = simplifyEvalForm sampleR scope constraint
         simplifiedForm = simplificationResult.evaluatedForm.form
         simplifiedScope = boxRestrictSplitOrder (formVariables simplifiedForm) scope
         simplifiedFormProblem = BP.Problem {scope = simplifiedScope, constraint = simplifiedForm}
-        rToRationalBounds r =
+        rToRationalBounds (r :: r) =
           let ball = convertExactly r :: MP.MPBall
               (lo, hi) = MP.endpoints ball
            in (rational lo, rational hi)
@@ -241,7 +241,8 @@ instance
       CertainFalse -> pure $ BP.pavingOuter scope (mkBoxes scope)
       TrueOrFalse -> do
         -- try simplex pruning first
-        simplexResult <- simplexPrune simplifiedScope simplifiedForm (exprValuesToRationalBounds rToRationalBounds simplificationResult.evaluatedForm.exprValues)
+        let rBounds = Map.map rToRationalBounds simplificationResult.evaluatedForm.exprValues
+        simplexResult <- simplexPrune simplifiedScope simplifiedForm rBounds
         case simplexResult of
           Just linearPruneResult ->
             pure $ mkLinearPrunePaving scope simplifiedForm linearPruneResult
