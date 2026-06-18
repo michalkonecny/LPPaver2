@@ -7,6 +7,7 @@ module Main (main) where
 
 import BranchAndPrune.BranchAndPrune (Problem (..))
 import Control.Concurrent (MVar, modifyMVar, newMVar)
+import Control.Monad (forever)
 import Data.Aeson qualified as A
 import Data.Map qualified as Map
 import Data.Text (Text)
@@ -16,7 +17,7 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import GHC.Generics (Generic)
 import GHC.Records
-import LPPaver2.ExampleProblems (exampleProblems, LPPProblemWithParamSpec(..))
+import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), exampleProblems)
 import LPPaver2.Export ()
 import LPPaver2.RealConstraints (ExprStore, FormStore)
 import LPPaver2.RealConstraints.Boxes (BoxStore)
@@ -24,7 +25,6 @@ import Network.WebSockets qualified as WS
 import ServerState (ServerState (..))
 import ServerState qualified
 import Prelude
-import Control.Monad (forever)
 
 main :: IO ()
 main = do
@@ -46,11 +46,15 @@ requestResponse stateMVar conn = do
   putStrLn $ "Received message: " ++ T.unpack msg
   -- TODO: fork ?
   request <- parseRequest msg
-  response <- modifyMVar stateMVar $ \state ->
-    handleRequest state request
-  let responseJSON = A.encode response
-  putStrLn $ "Sending response: " ++ TL.unpack (TL.decodeUtf8 responseJSON)
-  WS.sendTextData conn responseJSON
+  modifyMVar stateMVar $ \state -> do
+    newState <- handleRequest state request respond
+    return (newState, ())
+  where
+    respond :: Response -> IO ()
+    respond response = do
+      let responseJSON = A.encode response
+      putStrLn $ "Sending response: " ++ TL.unpack (TL.decodeUtf8 responseJSON)
+      WS.sendTextData conn responseJSON
 
 ------------------------
 --- Example problems ---
@@ -67,15 +71,16 @@ data ExampleProblemsResponse = ExampleProblemsResponse
 
 instance IsRequestResponse GetExampleProblemsRequest where
   type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
-  handleRequest state _ = do
+  handleRequest state _ respond = do
     let problems = exampleProblems
     let scopes = map (\p -> p.problem.scope) $ Map.elems problems
     let problemForms = map (\p -> p.problem.constraint) $ Map.elems problems
     let newState = ServerState.addBoxes scopes $ ServerState.addForms problemForms state
-    pure (newState, ExampleProblemsResponse {problems = problems, boxes = newState.boxes})
+    respond $ ExampleProblemsResponse {problems = problems, boxes = newState.boxes}
+    pure newState
 
 instance A.FromJSON GetExampleProblemsRequest where
-  parseJSON = A.genericParseJSON A.defaultOptions { A.tagSingleConstructors = True }
+  parseJSON = A.genericParseJSON A.defaultOptions {A.tagSingleConstructors = True}
 
 instance A.ToJSON ExampleProblemsResponse where
   toEncoding = A.genericToEncoding A.defaultOptions
@@ -95,42 +100,87 @@ data FormulaNodesResponse = FormulaNodesResponse
 
 instance IsRequestResponse GetAllFormulaNodesRequest where
   type ResponseType GetAllFormulaNodesRequest = FormulaNodesResponse
-  handleRequest state _ = do
-    pure (state, FormulaNodesResponse {exprs = state.exprs, forms = state.forms})
+  handleRequest state _ respond = do
+    respond $ FormulaNodesResponse {exprs = state.exprs, forms = state.forms}
+    pure state
 
 instance A.FromJSON GetAllFormulaNodesRequest where
-  parseJSON = A.genericParseJSON A.defaultOptions { A.tagSingleConstructors = True }
+  parseJSON = A.genericParseJSON A.defaultOptions {A.tagSingleConstructors = True}
 
 instance A.ToJSON FormulaNodesResponse where
+  toEncoding = A.genericToEncoding A.defaultOptions
+
+------------------------------------------------
+--- Running the solver and returning results ---
+------------------------------------------------
+
+data RunSolverRequest = RunSolverRequest
+  { runId :: String,
+    problemName :: String,
+    paramValues :: Map.Map String Double,
+    giveUpAccuracy :: Double,
+    numberOfThreads :: Int
+  }
+  deriving (Generic, Show)
+
+data SolverRunStatus = SolverRunning | SolverFinished | SolverFailed String
+  deriving (Generic, Show)
+
+data SolverRunStatusUpdate = SolverRunStatusUpdate
+  { runId :: String,
+    status :: SolverRunStatus
+  }
+  deriving (Generic)
+
+instance IsRequestResponse RunSolverRequest where
+  type ResponseType RunSolverRequest = SolverRunStatusUpdate
+  handleRequest state req respond = do
+    putStrLn $ "Received RunSolverRequest: " ++ show req
+    respond (SolverRunStatusUpdate {runId = req.runId, status = SolverRunning})
+    -- TODO
+    pure state
+
+instance A.FromJSON RunSolverRequest where
+  parseJSON = A.genericParseJSON A.defaultOptions
+
+instance A.ToJSON SolverRunStatus where
+  toEncoding = A.genericToEncoding A.defaultOptions
+
+instance A.ToJSON SolverRunStatusUpdate where
   toEncoding = A.genericToEncoding A.defaultOptions
 
 ------------------------------------------------
 --- Request/Response boilerplate and parsing ---
 ------------------------------------------------
 
--- TODO: add continnuation for further responses
 class IsRequestResponse request where
   type ResponseType request
-  handleRequest :: ServerState -> request -> IO (ServerState, ResponseType request)
+  handleRequest ::
+    ServerState ->
+    request ->
+    (ResponseType request -> IO ()) ->
+    IO ServerState
 
 data Request
   = RequestGetExampleProblems GetExampleProblemsRequest
   | RequestGetAllFormulaNodes GetAllFormulaNodesRequest
+  | RequestRunSolver RunSolverRequest
   deriving (Generic)
 
 data Response
   = ResponseExampleProblems ExampleProblemsResponse
   | ResponseFormulaNodes FormulaNodesResponse
+  | ResponseSolverRunStatusUpdate SolverRunStatusUpdate
   deriving (Generic)
 
 instance IsRequestResponse Request where
   type ResponseType Request = Response
-  handleRequest state (RequestGetExampleProblems req) = do
-    (newState, resp) <- handleRequest state req
-    pure (newState, ResponseExampleProblems resp)
-  handleRequest state (RequestGetAllFormulaNodes req) = do
-    (newState, resp) <- handleRequest state req
-    pure (newState, ResponseFormulaNodes resp)
+  handleRequest state (RequestGetExampleProblems req) respond = do
+    handleRequest state req (respond . ResponseExampleProblems)
+  handleRequest state (RequestGetAllFormulaNodes req) respond = do
+    handleRequest state req (respond . ResponseFormulaNodes)
+  handleRequest state (RequestRunSolver req) respond = do
+    handleRequest state req (respond . ResponseSolverRunStatusUpdate)
 
 parseRequest :: Text -> IO Request
 parseRequest msg =
