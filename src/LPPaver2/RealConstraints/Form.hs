@@ -15,10 +15,13 @@ module LPPaver2.RealConstraints.Form
     BinaryComp (..),
     formTrue,
     formFalse,
+    formComp,
     getFormDecision,
     formImpl,
     formIfThenElse,
     formIsComparison,
+    form1,
+    form2,
   )
 where
 

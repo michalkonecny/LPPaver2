@@ -36,6 +36,7 @@ library
       LPPaver2.RealConstraints.EvalArithmetic.MPBall
       LPPaver2.RealConstraints.Expr
       LPPaver2.RealConstraints.Form
+      LPPaver2.RealConstraints.Subst
   other-modules:
       Paths_LPPaver2
   autogen-modules:

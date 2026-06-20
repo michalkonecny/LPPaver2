@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { readonly, ref, watch, type Ref } from 'vue';
+import { readonly, ref, watch, type DeepReadonly, type Ref } from 'vue';
 import _ from 'lodash';
 import { getProverWS } from './proverWS';
 import type { Problem } from '@/problems/problems';
@@ -19,17 +19,33 @@ export type ParamSpec = {
   maxValue: number;
 };
 
+export type RunInfo = {
+  runId: string;
+  problemName: string;
+  paramValues: Record<string, number>;
+  status: 'RequestSent' | 'SolverRunning' | 'SolverFinished';
+  // TODO: add steps
+};
+
 export const useProverStore = defineStore('prover', () => {
   const exampleProblems: Ref<Record<string, ProblemWithParamSpec>> = ref({});
   const boxes: Ref<Record<BoxHash, Box>> = ref({});
   const exprs: Ref<Record<ExprHash, ExprF<ExprHash>>> = ref({});
   const forms: Ref<Record<FormHash, FormF<ExprHash, FormHash>>> = ref({});
+  const runs: Ref<Record<string, RunInfo>> = ref({});
+  const currentRunId: Ref<string | null> = ref(null);
 
   const exports = {
-    exampleProblems: readonly(exampleProblems) as typeof exampleProblems,
+    exampleProblems: readonly(exampleProblems),
+    boxes: readonly(boxes),
+    exprs: readonly(exprs),
+    forms: readonly(forms),
+    runs: readonly(runs),
+    currentRunId: currentRunId,
     getBox,
     getExpr,
     getForm,
+    startRun,
   };
 
   function getExpr(exprHash: ExprHash): Expr {
@@ -49,6 +65,44 @@ export const useProverStore = defineStore('prover', () => {
       throw new Error(`Box with hash ${boxHash} not found`);
     }
     return box;
+  }
+
+  type RunSolverRequest = {
+    runId: string;
+    problemName: string;
+    paramValues: Record<string, number>;
+    arithmetic: 'BallArithmetic' | 'AffineArithmetic';
+    giveUpAccuracy: number;
+    numberOfThreads: number;
+  };
+
+  async function startRun(problemName: string, paramValues: Record<string, number>) {
+    const ws = await getProverWS();
+    const runId = generateRunId();
+    const message: RunSolverRequest = {
+      runId,
+      problemName,
+      paramValues,
+      arithmetic: 'BallArithmetic',
+      giveUpAccuracy: 0.001,
+      numberOfThreads: 4,
+    };
+
+    ws.send(JSON.stringify(message));
+
+    runs.value[runId] = {
+      runId,
+      problemName,
+      paramValues,
+      status: 'RequestSent',
+    };
+
+    currentRunId.value = runId;
+  }
+
+  function generateRunId(): string {
+    // generate a random 12-character alphanumeric string
+    return Math.random().toString(36).substring(2, 14);
   }
 
   //////////////////////////////////////////

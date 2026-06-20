@@ -7,14 +7,17 @@ module LPPaver2.ExampleProblems
   ( exampleProblems,
     LPPProblemWithParamSpec (..),
     ParamSpec (..),
+    substituteParams,
   )
 where
 
 import BranchAndPrune.BranchAndPrune (Problem (..))
 import Data.Map qualified as Map
 import GHC.Generics (Generic)
+import GHC.Records (HasField (..))
 import LPPaver2.BranchAndPrune (LPPProblem)
 import LPPaver2.RealConstraints
+import LPPaver2.RealConstraints.Subst (determineVarsInForm)
 import MixedTypesNumPrelude
 
 data LPPProblemWithParamSpec = LPPProblemWithParamSpec
@@ -30,6 +33,10 @@ data ParamSpec = ParamSpec
     maxValue :: Rational
   }
   deriving (Generic)
+
+substituteParams :: LPPProblem -> Map.Map Var Rational -> LPPProblem
+substituteParams prob paramValues =
+  prob {constraint = determineVarsInForm prob.constraint paramValues}
 
 noParams :: LPPProblem -> LPPProblemWithParamSpec
 noParams prob =

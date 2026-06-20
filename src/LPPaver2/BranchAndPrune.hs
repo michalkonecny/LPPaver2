@@ -17,8 +17,7 @@ where
 import AERN2.MP (Kleenean (..), MPBall)
 import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
-import BranchAndPrune.ForkUtils (MonadUnliftIOWithState)
-import Control.Monad.IO.Unlift (MonadIO)
+import Control.Monad.IO.Unlift (MonadIO (liftIO), MonadUnliftIO)
 import Control.Monad.Logger (MonadLogger)
 import Data.Hashable (Hashable (hash))
 import Data.Map qualified as Map
@@ -27,6 +26,7 @@ import LPPaver2.LinearPrune (LinearPruneResult (..), linearPrune)
 import LPPaver2.RealConstraints
 import MixedTypesNumPrelude
 import Text.Printf (printf)
+
 -- import Debug.Trace (trace)
 
 type LPPProblem = BP.Problem Form Box
@@ -103,19 +103,24 @@ shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
       ]
 
     accuracyBelowThreshold :: MPBall -> Bool
-    accuracyBelowThreshold ball = 
+    accuracyBelowThreshold ball =
       -- trace (printf "Checking if box with radius %s should be given up (threshold: %s)" (show (MP.radius ball)) (show $ double giveUpAccuracy)) $
       diameter <= giveUpAccuracy
       where
         diameter = 2 * MP.radius ball
 
+lppStepsController :: (MonadIO m) => BP.StepsController m (LPPStep r)
+lppStepsController =
+  BP.StepsController {BP.reportStep = reportStep}
+  where
+    reportStep step = liftIO $ do
+      putStrLn $ "Step: " ++ show step
+
 lppBranchAndPrune ::
   ( MonadLogger m,
-    MonadIO m,
-    MonadUnliftIOWithState m,
+    MonadUnliftIO m,
     CanEval r,
-    HasKleeneanComparison r,
-    BP.CanControlSteps m (LPPStep r)
+    HasKleeneanComparison r
   ) =>
   r ->
   LPPBPParams ->
@@ -123,6 +128,7 @@ lppBranchAndPrune ::
 lppBranchAndPrune (sampleR :: r) (LPPBPParams {..}) = do
   -- conn <- liftIO $ Redis.checkedConnect Redis.defaultConnectInfo
   BP.branchAndPruneM
+    lppStepsController
     ( BP.Params
         { BP.problem,
           BP.pruningMethod = sampleR,
@@ -177,7 +183,7 @@ mkLinearPrunePaving scope simplifiedForm LinearPruneResult {maybeRemainingBox, r
         then BP.pavingInner scope (mkBoxes scope) -- true on scope
         else BP.pavingOuter scope (mkBoxes scope) -- false on scope
     Just remainingBox ->
-      -- linear pruning 
+      -- linear pruning
       let remainingProblem = BP.Problem {scope = remainingBox, constraint = simplifiedForm}
           decidedBoxes = mkBoxes $ mkBoxDifference scope remainingBox
        in BP.Paving

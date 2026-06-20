@@ -5,9 +5,13 @@
 
 module Main (main) where
 
+import AERN2.MP (MPBall)
+import AERN2.MP qualified as MP
+import AERN2.MP.Affine (MPAffine (..), MPAffineConfig (..))
 import BranchAndPrune.BranchAndPrune (Problem (..))
 import Control.Concurrent (MVar, modifyMVar, newMVar)
 import Control.Monad (forever)
+import Control.Monad.Logger (runStdoutLoggingT)
 import Data.Aeson qualified as A
 import Data.Map qualified as Map
 import Data.Text (Text)
@@ -17,12 +21,14 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import GHC.Generics (Generic)
 import GHC.Records
-import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), exampleProblems)
+import LPPaver2.BranchAndPrune (LPPBPParams (..), lppBranchAndPrune)
+import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), exampleProblems, substituteParams)
 import LPPaver2.Export ()
 import LPPaver2.RealConstraints (ExprStore, FormStore)
 import LPPaver2.RealConstraints.Boxes (BoxStore)
+import MixedTypesNumPrelude (convert, convertExactly)
 import Network.WebSockets qualified as WS
-import ServerState (ServerState (..))
+import ServerState (RunID (..), ServerState (..))
 import ServerState qualified
 import Prelude
 
@@ -114,33 +120,72 @@ instance A.ToJSON FormulaNodesResponse where
 --- Running the solver and returning results ---
 ------------------------------------------------
 
+data Arithmetic = BallArithmetic | AffineArithmetic
+  deriving (Generic, Show)
+
 data RunSolverRequest = RunSolverRequest
-  { runId :: String,
+  { runId :: RunID,
     problemName :: String,
     paramValues :: Map.Map String Double,
+    arithmetic :: Arithmetic,
     giveUpAccuracy :: Double,
     numberOfThreads :: Int
   }
   deriving (Generic, Show)
 
-data SolverRunStatus = SolverRunning | SolverFinished | SolverFailed String
+data SolverRunStatus = SolverRunning | SolverFinished
   deriving (Generic, Show)
 
 data SolverRunStatusUpdate = SolverRunStatusUpdate
-  { runId :: String,
+  { runId :: RunID,
     status :: SolverRunStatus
   }
-  deriving (Generic)
+  deriving (Show, Generic)
 
 instance IsRequestResponse RunSolverRequest where
   type ResponseType RunSolverRequest = SolverRunStatusUpdate
-  handleRequest state req respond = do
-    putStrLn $ "Received RunSolverRequest: " ++ show req
-    respond (SolverRunStatusUpdate {runId = req.runId, status = SolverRunning})
+  handleRequest state request respond = do
+    putStrLn $ "Received RunSolverRequest: " ++ show request
+    respond (SolverRunStatusUpdate {runId = request.runId, status = SolverRunning})
+    let params = mkParams request
+    _ <- runStdoutLoggingT $ case request.arithmetic of
+      BallArithmetic -> do
+        lppBranchAndPrune sampleMPBall params
+      AffineArithmetic -> do
+        lppBranchAndPrune sampleMPAffine params
     -- TODO
+    respond (SolverRunStatusUpdate {runId = request.runId, status = SolverFinished})
     pure state
 
+mkParams :: RunSolverRequest -> LPPBPParams
+mkParams request =
+  LPPBPParams
+    { problem = problemWithSubstitutedParams,
+      maxThreads = request.numberOfThreads,
+      giveUpAccuracy = convert request.giveUpAccuracy,
+      shouldLog = False
+    }
+  where
+    problemWithSubstitutedParams = case Map.lookup request.problemName exampleProblems of
+      Just (LPPProblemWithParamSpec {problem}) ->
+        let paramValues = Map.map convert request.paramValues
+            substitutedProblem = substituteParams problem paramValues
+         in substitutedProblem
+      Nothing -> error $ "Problem not found: " ++ request.problemName
+
+sampleMPBall :: MPBall
+sampleMPBall = MP.mpBallP (MP.prec 1000) (0 :: Integer)
+
+sampleMPAffine :: MPAffine
+sampleMPAffine = MPAffine _conf (convertExactly (0 :: Integer)) Map.empty
+  where
+    _conf :: MPAffineConfig
+    _conf = MPAffineConfig {maxTerms = 10, precision = 1000}
+
 instance A.FromJSON RunSolverRequest where
+  parseJSON = A.genericParseJSON A.defaultOptions
+
+instance A.FromJSON Arithmetic where
   parseJSON = A.genericParseJSON A.defaultOptions
 
 instance A.ToJSON SolverRunStatus where
@@ -195,10 +240,16 @@ parseRequest msg =
               putStrLn $ "Parsed GetAllFormulaNodesRequest: " ++ show req
               return (RequestGetAllFormulaNodes req)
             Left err2 -> do
-              putStrLn "Failed to parse request"
-              putStrLn $ "Error parsing as GetExampleProblemsRequest: " ++ err1
-              putStrLn $ "Error parsing as GetAllFormulaNodesRequest: " ++ err2
-              fail "Invalid request"
+              case A.eitherDecodeStrict msgBS of
+                Right req -> do
+                  putStrLn $ "Parsed RunSolverRequest: " ++ show req
+                  return (RequestRunSolver req)
+                Left err3 -> do
+                  putStrLn "Failed to parse request"
+                  putStrLn $ "Error parsing as GetExampleProblemsRequest: " ++ err1
+                  putStrLn $ "Error parsing as GetAllFormulaNodesRequest: " ++ err2
+                  putStrLn $ "Error parsing as RunSolverRequest: " ++ err3
+                  fail "Invalid request"
 
 instance A.ToJSON Response where
   toEncoding = A.genericToEncoding A.defaultOptions

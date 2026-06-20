@@ -124,6 +124,9 @@ data EvaluatedForm r = EvaluatedForm
     formValues :: Map.Map FormHash Kleenean
   }
 
+instance Show (EvaluatedForm r) where
+  show _ = "EvaluatedForm..."
+
 data SimplifyFormResult r = SimplifyFormResult
   { evaluatedForm :: EvaluatedForm r,
     oldToNew :: OldToNew

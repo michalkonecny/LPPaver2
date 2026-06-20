@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, ref, watch, type DeepReadonly } from 'vue';
   import { useStepsStore } from './steps/stepsStore';
   import { useProverStore, type ParamSpec } from './proverLink/proverStore.ts';
 
@@ -14,7 +14,24 @@
     return proverStore.exampleProblems[selectedProblemName.value];
   });
 
-  const params = ref<{ spec: ParamSpec; val: number }[]>([]);
+  type ParamValue = {
+    spec: DeepReadonly<ParamSpec>;
+    val: number;
+  };
+
+  const params = ref<ParamValue[]>([]);
+
+  function run() {
+    if (!selectedProblemName.value) return;
+
+    // transform params array into a record of paramName -> val
+    const paramsObj: Record<string, number> = {};
+    for (const param of params.value) {
+      paramsObj[param.spec.paramName] = param.val;
+    }
+
+    proverStore.startRun(selectedProblemName.value, paramsObj);
+  }
 
   watch(selectedProblem, (newProblem) => {
     if (newProblem) {
@@ -53,8 +70,13 @@
           v-model.number="param.val"
           :min="param.spec.minValue"
           :max="param.spec.maxValue"
+          step="0.001"
         />
       </div>
+    </div>
+    <!-- run button -->
+    <div class="mt-2">
+      <button :disabled="!selectedProblemName" class="btn btn-primary" @click="run">Run</button>
     </div>
   </div>
 </template>

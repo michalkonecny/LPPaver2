@@ -1,23 +1,55 @@
-module ServerState (ServerState (..), new, addBoxes, addForms) where
+module ServerState
+  ( RunID (..),
+    RunInfo (..),
+    LPPStepBAorAA (..),
+    ServerState (..),
+    new,
+    addBoxes,
+    addForms,
+  )
+where
 
+import AERN2.MP (MPBall)
+import AERN2.MP.Affine (MPAffine)
+import Data.Aeson qualified as A
 import Data.List qualified as List
 import Data.Map qualified as Map
+import GHC.Generics (Generic)
 import GHC.Records
+import LPPaver2.BranchAndPrune (LPPStep)
 import LPPaver2.RealConstraints (Box (..), BoxStore, ExprStore, Form (..), FormStore)
 import Prelude
 
 data ServerState = ServerState
   { boxes :: BoxStore,
     exprs :: ExprStore,
-    forms :: FormStore
+    forms :: FormStore,
+    runs :: Map.Map RunID RunInfo
   }
+
+newtype RunID = RunID String
+  deriving (Eq, Ord, Show, Generic)
+
+instance A.FromJSON RunID where
+  parseJSON = A.genericParseJSON A.defaultOptions
+
+instance A.ToJSON RunID where
+  toEncoding = A.genericToEncoding A.defaultOptions
+
+data RunInfo = RunInfo
+  { runID :: RunID,
+    runSteps :: [LPPStepBAorAA]
+  }
+
+data LPPStepBAorAA = LPPStepBA (LPPStep MPBall) | LPPStepAA (LPPStep MPAffine)
 
 new :: ServerState
 new =
   ServerState
     { boxes = Map.empty,
       exprs = Map.empty,
-      forms = Map.empty
+      forms = Map.empty,
+      runs = Map.empty
     }
 
 addBoxes :: [Box] -> ServerState -> ServerState
