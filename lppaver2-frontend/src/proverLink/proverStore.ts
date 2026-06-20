@@ -27,6 +27,17 @@ export type RunInfo = {
   // TODO: add steps
 };
 
+export type Arithmetic = 'BallArithmetic' | 'AffineArithmetic';
+
+export type RunSolverRequest = {
+  runId: string;
+  problemName: string;
+  paramValues: Record<string, number>;
+  arithmetic: Arithmetic;
+  giveUpAccuracy: number;
+  numberOfThreads: number;
+};
+
 export const useProverStore = defineStore('prover', () => {
   const exampleProblems: Ref<Record<string, ProblemWithParamSpec>> = ref({});
   const boxes: Ref<Record<BoxHash, Box>> = ref({});
@@ -67,25 +78,22 @@ export const useProverStore = defineStore('prover', () => {
     return box;
   }
 
-  type RunSolverRequest = {
-    runId: string;
-    problemName: string;
-    paramValues: Record<string, number>;
-    arithmetic: 'BallArithmetic' | 'AffineArithmetic';
-    giveUpAccuracy: number;
-    numberOfThreads: number;
-  };
-
-  async function startRun(problemName: string, paramValues: Record<string, number>) {
+  async function startRun(
+    problemName: string,
+    paramValues: Record<string, number>,
+    arithmetic: Arithmetic,
+    giveUpAccuracy: number,
+    numberOfThreads: number = 4,
+  ) {
     const ws = await getProverWS();
     const runId = generateRunId();
     const message: RunSolverRequest = {
       runId,
       problemName,
       paramValues,
-      arithmetic: 'BallArithmetic',
-      giveUpAccuracy: 0.001,
-      numberOfThreads: 4,
+      arithmetic,
+      giveUpAccuracy,
+      numberOfThreads,
     };
 
     ws.send(JSON.stringify(message));

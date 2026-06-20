@@ -1,7 +1,7 @@
 <script lang="ts" setup>
   import { computed, ref, watch, type DeepReadonly } from 'vue';
   import { useStepsStore } from './steps/stepsStore';
-  import { useProverStore, type ParamSpec } from './proverLink/proverStore.ts';
+  import { useProverStore, type Arithmetic, type ParamSpec } from './proverLink/proverStore.ts';
 
   const proverStore = useProverStore();
   const stepsStore = useStepsStore();
@@ -13,6 +13,9 @@
     }
     return proverStore.exampleProblems[selectedProblemName.value];
   });
+
+  const selectedArithmetic = ref<Arithmetic>('BallArithmetic');
+  const giveUpAccuracy = ref<number>(0.001);
 
   type ParamValue = {
     spec: DeepReadonly<ParamSpec>;
@@ -30,7 +33,12 @@
       paramsObj[param.spec.paramName] = param.val;
     }
 
-    proverStore.startRun(selectedProblemName.value, paramsObj);
+    proverStore.startRun(
+      selectedProblemName.value,
+      paramsObj,
+      selectedArithmetic.value,
+      giveUpAccuracy.value,
+    );
   }
 
   watch(selectedProblem, (newProblem) => {
@@ -74,8 +82,23 @@
         />
       </div>
     </div>
+    <div class="flex-grow-1">&nbsp;</div>
+    <!-- Choice of arithmetic -->
+    <select class="form-select w-auto" v-model="selectedArithmetic">
+      <option value="BallArithmetic">MP Interval Arithmetic</option>
+      <option value="AffineArithmetic">MP Affine Arithmetic</option>
+    </select>
+    <!-- Input max size of box before giving up -->
+    <label for="giveUpAccuracy" class="form-label">Max box size: </label>
+    <input
+      type="number"
+      class="form-control w-auto mx-2"
+      id="giveUpAccuracy"
+      v-model.number="giveUpAccuracy"
+      step="0.01"
+    />
     <!-- run button -->
-    <div class="mt-2">
+    <div>
       <button :disabled="!selectedProblemName" class="btn btn-primary" @click="run">Run</button>
     </div>
   </div>
