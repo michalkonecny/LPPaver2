@@ -17,7 +17,6 @@ import GHC.Generics (Generic)
 import GHC.Records (HasField (..))
 import LPPaver2.BranchAndPrune (LPPProblem)
 import LPPaver2.RealConstraints
-import LPPaver2.RealConstraints.Subst (determineVarsInForm)
 import MixedTypesNumPrelude
 
 data LPPProblemWithParamSpec = LPPProblemWithParamSpec
@@ -36,7 +35,9 @@ data ParamSpec = ParamSpec
 
 substituteParams :: LPPProblem -> Map.Map Var Rational -> LPPProblem
 substituteParams prob paramValues =
-  prob {constraint = determineVarsInForm prob.constraint paramValues}
+  prob {scope = newScope}
+  where
+    newScope = addParamValuesToBox paramValues prob.scope
 
 noParams :: LPPProblem -> LPPProblemWithParamSpec
 noParams prob =

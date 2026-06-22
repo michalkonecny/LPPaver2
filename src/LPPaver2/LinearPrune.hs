@@ -181,6 +181,7 @@ linearPruneCIE scope ies
         Box_
           { varDomains = varDomainsWithInequalities,
             splitOrder = scope.box_.splitOrder,
+            volumeVars = scope.box_.volumeVars,
             except = Nothing
           }
     result =
