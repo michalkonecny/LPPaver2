@@ -1,10 +1,23 @@
 <script lang="ts" setup>
   import { computed, ref, watch, type DeepReadonly } from 'vue';
+  import { storeToRefs } from 'pinia';
   import { useStepsStore } from './steps/stepsStore';
   import { useProverStore, type Arithmetic, type ParamSpec } from './proverLink/proverStore.ts';
 
-  const proverStore = useProverStore();
   const stepsStore = useStepsStore();
+  const proverStore = useProverStore();
+  const { currentRunId, runs } = storeToRefs(proverStore);
+
+  const currentRunInfo = computed(() => {
+    if (!currentRunId.value) return null;
+    return proverStore.getRunInfo(currentRunId.value);
+  });
+
+  const currentRunStatus = computed(() => currentRunInfo.value?.status ?? null);
+
+  const canStartRun = computed(
+    () => selectedProblemName.value !== null && currentRunStatus.value !== 'SolverRunning',
+  );
 
   const selectedProblemName = ref<string | null>(null);
   const selectedProblem = computed(() => {
@@ -99,7 +112,13 @@
     />
     <!-- run button -->
     <div>
-      <button :disabled="!selectedProblemName" class="btn btn-primary" @click="run">Run</button>
+      <button :disabled="!canStartRun" class="btn btn-primary" @click="run">Run</button>
+    </div>
+  </div>
+  <div class="d-flex align-items-baseline">
+    <div class="mx-2">
+      <span v-if="currentRunStatus">Current run status: {{ currentRunStatus }}</span>
+      <span v-else>No run in progress</span>
     </div>
   </div>
 </template>

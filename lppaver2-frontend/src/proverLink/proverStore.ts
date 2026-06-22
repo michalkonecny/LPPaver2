@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { readonly, ref, watch, type DeepReadonly, type Ref } from 'vue';
+import { reactive, readonly, ref, watch, type DeepReadonly, type Ref } from 'vue';
 import _ from 'lodash';
 import { getProverWS } from './proverWS';
 import type { Problem } from '@/problems/problems';
@@ -19,11 +19,13 @@ export type ParamSpec = {
   maxValue: number;
 };
 
+export type RunStatus = 'RequestSent' | 'SolverRunning' | 'SolverFinished';
+
 export type RunInfo = {
   runId: string;
   problemName: string;
   paramValues: Record<string, number>;
-  status: 'RequestSent' | 'SolverRunning' | 'SolverFinished';
+  status: RunStatus;
   // TODO: add steps
 };
 
@@ -57,6 +59,7 @@ export const useProverStore = defineStore('prover', () => {
     getExpr,
     getForm,
     startRun,
+    getRunInfo,
   };
 
   function getExpr(exprHash: ExprHash): Expr {
@@ -98,12 +101,12 @@ export const useProverStore = defineStore('prover', () => {
 
     ws.send(JSON.stringify(message));
 
-    runs.value[runId] = {
+    runs.value[runId] = reactive({
       runId,
       problemName,
       paramValues,
       status: 'RequestSent',
-    };
+    });
 
     currentRunId.value = runId;
   }
@@ -111,6 +114,12 @@ export const useProverStore = defineStore('prover', () => {
   function generateRunId(): string {
     // generate a random 12-character alphanumeric string
     return Math.random().toString(36).substring(2, 14);
+  }
+
+  function getRunInfo(runId: string): DeepReadonly<RunInfo> | null {
+    const runInfo = runs.value[runId];
+    if (!runInfo) return null;
+    return readonly(runInfo);
   }
 
   //////////////////////////////////////////
@@ -133,6 +142,15 @@ export const useProverStore = defineStore('prover', () => {
         case 'ResponseFormulaNodes': {
           exprs.value = { ...exprs.value, ...message.contents.exprs };
           forms.value = { ...forms.value, ...message.contents.forms };
+          break;
+        }
+        case 'ResponseSolverRunStatusUpdate': {
+          const { runId, status } = message.contents;
+          if (runs.value[runId]) {
+            runs.value[runId].status = status;
+          } else {
+            console.warn(`Received run status for unknown runId ${runId}`);
+          }
           break;
         }
         default:
@@ -178,5 +196,12 @@ type ProverMessage =
       contents: {
         exprs: Record<ExprHash, ExprF<ExprHash>>;
         forms: Record<FormHash, FormF<ExprHash, FormHash>>;
+      };
+    }
+  | {
+      tag: 'ResponseSolverRunStatusUpdate';
+      contents: {
+        runId: string;
+        status: RunStatus;
       };
     };
