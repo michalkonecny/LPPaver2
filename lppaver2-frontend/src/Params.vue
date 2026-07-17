@@ -27,7 +27,22 @@
     return proverStore.exampleProblems[selectedProblemName.value];
   });
 
-  const selectedArithmetic = ref<Arithmetic>('BallArithmetic');
+  type ArithType = 'BallArithmetic' | 'AffineArithmetic';
+
+  const selectedArithType = ref<ArithType>('BallArithmetic');
+  const selectedPrecision = ref<number>(100);
+  const selectedMaxTerms = ref<number>(10);
+
+  const selectedArithmetic = computed<Arithmetic>(() => {
+    return selectedArithType.value === 'BallArithmetic'
+      ? { tag: 'BallArithmetic', precision: selectedPrecision.value }
+      : {
+          tag: 'AffineArithmetic',
+          precision: selectedPrecision.value,
+          maxTerms: selectedMaxTerms.value,
+        };
+  });
+
   const giveUpAccuracy = ref<number>(0.001);
 
   type ParamValue = {
@@ -66,7 +81,7 @@
 </script>
 
 <template>
-  <div class="d-flex align-items-baseline">
+  <div class="d-flex align-items-baseline gap-2">
     <!-- problem selector -->
     <div class="mb-2">
       <select class="form-select" v-model="selectedProblemName">
@@ -81,7 +96,7 @@
       <div
         v-for="param in params"
         :key="param.spec.paramName"
-        class="d-flex align-items-baseline mx-2"
+        class="d-flex align-items-baseline gap-2"
       >
         <label :for="param.spec.paramName" class="form-label">{{ param.spec.paramName }}</label>
         <input
@@ -91,13 +106,13 @@
           v-model.number="param.val"
           :min="param.spec.minValue"
           :max="param.spec.maxValue"
-          step="0.001"
+          :step="undefined"
         />
       </div>
     </div>
     <div class="flex-grow-1">&nbsp;</div>
     <!-- Choice of arithmetic -->
-    <select class="form-select w-auto" v-model="selectedArithmetic">
+    <select class="form-select w-auto" v-model="selectedArithType">
       <option value="BallArithmetic">MP Interval Arithmetic</option>
       <option value="AffineArithmetic">MP Affine Arithmetic</option>
     </select>
@@ -105,15 +120,13 @@
     <label for="giveUpAccuracy" class="form-label">Max box size: </label>
     <input
       type="number"
-      class="form-control w-auto mx-2"
+      class="form-control w-auto"
       id="giveUpAccuracy"
       v-model.number="giveUpAccuracy"
       step="0.01"
     />
     <!-- run button -->
-    <div>
-      <button :disabled="!canStartRun" class="btn btn-primary" @click="run">Run</button>
-    </div>
+    <button :disabled="!canStartRun" class="btn btn-primary" @click="run">Run</button>
   </div>
   <div class="d-flex align-items-baseline">
     <div class="mx-2">

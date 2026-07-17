@@ -2,14 +2,14 @@ module LPPaver2.RealConstraints
   ( module LPPaver2.RealConstraints.Expr,
     module LPPaver2.RealConstraints.Form,
     module LPPaver2.RealConstraints.Boxes,
-    module LPPaver2.RealConstraints.Eval,
+    module LPPaver2.RealConstraints.EvalArith,
   )
 where
 
 import LPPaver2.RealConstraints.Boxes
 import LPPaver2.RealConstraints.Expr
 import LPPaver2.RealConstraints.Form
-import LPPaver2.RealConstraints.Eval
+import LPPaver2.RealConstraints.EvalArith
 import LPPaver2.RealConstraints.EvalArithmetic.MPBall ()
 import LPPaver2.RealConstraints.EvalArithmetic.AffArith ()
 

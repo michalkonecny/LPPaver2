@@ -29,7 +29,14 @@ export type RunInfo = {
   // TODO: add steps
 };
 
-export type Arithmetic = 'BallArithmetic' | 'AffineArithmetic';
+// Haskell definition:
+// data Arithmetic
+//   = BallArithmetic {precision :: Integer}
+//   | AffineArithmetic {precision :: Integer, maxTerms :: Int}
+
+export type Arithmetic =
+  | { tag: 'BallArithmetic'; precision: number }
+  | { tag: 'AffineArithmetic'; precision: number; maxTerms: number };
 
 export type RunSolverRequest = {
   runId: string;

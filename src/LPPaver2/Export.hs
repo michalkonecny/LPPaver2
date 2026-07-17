@@ -20,6 +20,7 @@ import GHC.Records (getField)
 import LPPaver2.BranchAndPrune (LPPPaving, LPPProblem)
 import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), ParamSpec (..))
 import LPPaver2.RealConstraints
+import LPPaver2.RealConstraints.Eval (EvaluatedFormR (..))
 import MixedTypesNumPrelude
 
 ------------------------------------------------
@@ -113,8 +114,11 @@ instance A.ToJSON Form where
   toJSON (Form {..}) =
     A.object ["formH" .= root]
 
-instance (A.ToJSON r) => A.ToJSON (EvaluatedForm r) where
-  toJSON (EvaluatedForm {exprValues, formValues}) =
+instance A.ToJSON EvaluatedForm where
+  toJSON (EvaluatedFormMPBall (EvaluatedFormR {exprValues, formValues})) =
+    A.object
+      ["exprValues" .= exprValues, "formValues" .= formValues]
+  toJSON (EvaluatedFormAffine (EvaluatedFormR {exprValues, formValues})) =
     A.object
       ["exprValues" .= exprValues, "formValues" .= formValues]
 

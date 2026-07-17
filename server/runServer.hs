@@ -1,16 +1,17 @@
 {-# LANGUAGE UndecidableInstances #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
 {-# HLINT ignore "Use >" #-}
+{-# OPTIONS_GHC -Wno-partial-fields #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 module Main (main) where
 
-import AERN2.MP (MPBall)
 import AERN2.MP qualified as MP
 import AERN2.MP.Affine (MPAffine (..), MPAffineConfig (..))
 import BranchAndPrune.BranchAndPrune (Problem (..))
-import Control.Concurrent (MVar, modifyMVar, newMVar)
+import BranchAndPrune.BranchAndPrune qualified as BP
+import Control.Concurrent (MVar, modifyMVar, modifyMVar_, newMVar, takeMVar)
 import Control.Monad (forever)
+import Control.Monad.IO.Unlift (MonadIO (liftIO))
 import Control.Monad.Logger (runStdoutLoggingT)
 import Data.Aeson qualified as A
 import Data.Map qualified as Map
@@ -21,14 +22,14 @@ import Data.Text.Lazy qualified as TL
 import Data.Text.Lazy.Encoding qualified as TL
 import GHC.Generics (Generic)
 import GHC.Records
-import LPPaver2.BranchAndPrune (LPPBPParams (..), lppBranchAndPrune)
+import LPPaver2.BranchAndPrune (LPPBPParams (..), LPPStep, getStepBoxes, getStepExprs, getStepForms, lppBranchAndPrune)
 import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), exampleProblems, substituteParams)
 import LPPaver2.Export ()
-import LPPaver2.RealConstraints (ExprStore, FormStore)
+import LPPaver2.RealConstraints (EvalArithmetic (..), ExprStore, FormStore)
 import LPPaver2.RealConstraints.Boxes (BoxStore)
 import MixedTypesNumPrelude (convert, convertExactly)
 import Network.WebSockets qualified as WS
-import ServerState (RunID (..), ServerState (..))
+import ServerState (RunID (..), RunInfo (..), ServerState (..))
 import ServerState qualified
 import Prelude
 
@@ -120,8 +121,23 @@ instance A.ToJSON FormulaNodesResponse where
 --- Running the solver and returning results ---
 ------------------------------------------------
 
-data Arithmetic = BallArithmetic | AffineArithmetic
+data Arithmetic
+  = BallArithmetic {precision :: Integer}
+  | AffineArithmetic {precision :: Integer, maxTerms :: Int}
   deriving (Generic, Show)
+
+getEvalArithmetic :: Arithmetic -> EvalArithmetic
+getEvalArithmetic (BallArithmetic {precision}) =
+  EvalArithmeticMPBall {sampleBall = MP.mpBallP (MP.prec precision) (0 :: Integer)}
+getEvalArithmetic (AffineArithmetic {precision, maxTerms}) =
+  EvalArithmeticAffine
+    { sampleAffine =
+        MPAffine
+          { config = MPAffineConfig {maxTerms = maxTerms, precision = precision},
+            centre = convertExactly (0 :: Integer),
+            errTerms = Map.empty
+          }
+    }
 
 data RunSolverRequest = RunSolverRequest
   { runId :: RunID,
@@ -146,16 +162,38 @@ instance IsRequestResponse RunSolverRequest where
   type ResponseType RunSolverRequest = SolverRunStatusUpdate
   handleRequest state request respond = do
     putStrLn $ "Received RunSolverRequest: " ++ show request
-    respond (SolverRunStatusUpdate {runId = request.runId, status = SolverRunning})
+    let runId = request.runId
+    respond (SolverRunStatusUpdate {runId, status = SolverRunning})
     let params = mkParams request
-    _ <- runStdoutLoggingT $ case request.arithmetic of
-      BallArithmetic -> do
-        lppBranchAndPrune sampleMPBall params
-      AffineArithmetic -> do
-        lppBranchAndPrune sampleMPAffine params
-    -- TODO
-    respond (SolverRunStatusUpdate {runId = request.runId, status = SolverFinished})
-    pure state
+    stateMV <- liftIO $ newMVar state
+    _ <- runStdoutLoggingT $ do
+      lppBranchAndPrune (getEvalArithmetic request.arithmetic) (lppStepsController runId stateMV) params
+    respond (SolverRunStatusUpdate {runId, status = SolverFinished})
+    liftIO $ takeMVar stateMV
+
+lppStepsController :: (MonadIO m) => RunID -> MVar ServerState -> BP.StepsController m LPPStep
+lppStepsController runId stateMV =
+  BP.StepsController {reportStep}
+  where
+    reportStep step = liftIO $ do 
+      modifyMVar_ stateMV (pure . addStepToState step)
+      putStrLn $ "Step for runId " ++ show runId ++ ": " ++ show step
+    -- This is the only place where stateMV is modified.
+    -- Thus all updates follow the take-put protocol, making the modifications atomic.
+
+    addStepToState :: LPPStep -> ServerState -> ServerState
+    addStepToState step state =
+      state
+        { -- Update the server state with the new boxes, expressions, and forms from the step
+          boxes = Map.union state.boxes (getStepBoxes step),
+          exprs = Map.union state.exprs (getStepExprs step),
+          forms = Map.union state.forms (getStepForms step),
+          runs = Map.alter updateRunInfo runId state.runs
+        }
+      where
+        updateRunInfo :: Maybe RunInfo -> Maybe RunInfo
+        updateRunInfo Nothing = Just $ RunInfo {runID = runId, runSteps = [step]}
+        updateRunInfo (Just runInfo) = Just $ runInfo {runSteps = runInfo.runSteps ++ [step]}
 
 mkParams :: RunSolverRequest -> LPPBPParams
 mkParams request =
@@ -172,15 +210,6 @@ mkParams request =
             substitutedProblem = substituteParams problem paramValues
          in substitutedProblem
       Nothing -> error $ "Problem not found: " ++ request.problemName
-
-sampleMPBall :: MPBall
-sampleMPBall = MP.mpBallP (MP.prec 1000) (0 :: Integer)
-
-sampleMPAffine :: MPAffine
-sampleMPAffine = MPAffine _conf (convertExactly (0 :: Integer)) Map.empty
-  where
-    _conf :: MPAffineConfig
-    _conf = MPAffineConfig {maxTerms = 10, precision = 1000}
 
 instance A.FromJSON RunSolverRequest where
   parseJSON = A.genericParseJSON A.defaultOptions

@@ -1,7 +1,6 @@
 module ServerState
   ( RunID (..),
     RunInfo (..),
-    LPPStepBAorAA (..),
     ServerState (..),
     new,
     addBoxes,
@@ -9,8 +8,6 @@ module ServerState
   )
 where
 
-import AERN2.MP (MPBall)
-import AERN2.MP.Affine (MPAffine)
 import Data.Aeson qualified as A
 import Data.List qualified as List
 import Data.Map qualified as Map
@@ -38,10 +35,8 @@ instance A.ToJSON RunID where
 
 data RunInfo = RunInfo
   { runID :: RunID,
-    runSteps :: [LPPStepBAorAA]
+    runSteps :: [LPPStep]
   }
-
-data LPPStepBAorAA = LPPStepBA (LPPStep MPBall) | LPPStepAA (LPPStep MPAffine)
 
 new :: ServerState
 new =

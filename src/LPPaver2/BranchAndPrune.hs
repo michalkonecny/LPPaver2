@@ -17,13 +17,14 @@ where
 import AERN2.MP (Kleenean (..), MPBall)
 import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
-import Control.Monad.IO.Unlift (MonadIO (liftIO), MonadUnliftIO)
+import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Logger (MonadLogger)
 import Data.Hashable (Hashable (hash))
 import Data.Map qualified as Map
 import GHC.Records
 import LPPaver2.LinearPrune (LinearPruneResult (..), linearPrune)
 import LPPaver2.RealConstraints
+import LPPaver2.RealConstraints.Eval (EvaluatedFormR (..))
 import MixedTypesNumPrelude
 import Text.Printf (printf)
 
@@ -33,9 +34,9 @@ type LPPProblem = BP.Problem Form Box
 
 type LPPPaving = BP.Paving Form Box Boxes
 
-type LPPStep r = BP.Step LPPProblem LPPPaving (EvaluatedForm r)
+type LPPStep = BP.Step LPPProblem LPPPaving EvaluatedForm
 
-getStepBoxes :: LPPStep r -> BoxStore
+getStepBoxes :: LPPStep -> BoxStore
 getStepBoxes step =
   scopesStore `Map.union` pavingBoxStore
   where
@@ -48,7 +49,7 @@ getStepBoxes step =
     pavingsScopes = [p.scope | p <- pavings]
     pavingBoxStore = Map.unions [paving.inner.store `Map.union` paving.outer.store | paving <- pavings]
 
-getStepExprs :: LPPStep r -> ExprStore
+getStepExprs :: LPPStep -> ExprStore
 getStepExprs step =
   constraintsStore `Map.union` undecidedStore
   where
@@ -62,7 +63,7 @@ getStepExprs step =
     problems = BP.getStepProblems step
     pavings = BP.getStepPavings step
 
-getStepForms :: LPPStep r -> FormStore
+getStepForms :: LPPStep -> FormStore
 getStepForms step =
   constraintsStore `Map.union` undecidedStore `Map.union` basicFormStore
   where
@@ -109,33 +110,27 @@ shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
       where
         diameter = 2 * MP.radius ball
 
-lppStepsController :: (MonadIO m) => BP.StepsController m (LPPStep r)
-lppStepsController =
-  BP.StepsController {BP.reportStep = reportStep}
-  where
-    reportStep step = liftIO $ do
-      putStrLn $ "Step: " ++ show step
-
 lppBranchAndPrune ::
   ( MonadLogger m,
-    MonadUnliftIO m,
-    CanEval r,
-    HasKleeneanComparison r
+    MonadUnliftIO m
+    -- CanEval r,
+    -- HasKleeneanComparison r
   ) =>
-  r ->
+  EvalArithmetic ->
+  BP.StepsController m LPPStep ->
   LPPBPParams ->
   m LPPBPResult
-lppBranchAndPrune (sampleR :: r) (LPPBPParams {..}) = do
+lppBranchAndPrune evalArithmetic lppStepsController (LPPBPParams {..}) = do
   -- conn <- liftIO $ Redis.checkedConnect Redis.defaultConnectInfo
   BP.branchAndPruneM
     lppStepsController
     ( BP.Params
         { BP.problem,
-          BP.pruningMethod = sampleR,
+          BP.pruningMethod = evalArithmetic,
           BP.shouldAbort = const Nothing,
           BP.shouldGiveUpSolvingProblem = shouldGiveUpOnBPLPPProblem giveUpAccuracy :: LPPProblem -> Bool,
           BP.dummyPriorityQueue,
-          BP.dummyEvalInfo = EvaluatedForm {form = formTrue, exprValues = Map.empty, formValues = Map.empty} :: EvaluatedForm r,
+          BP.dummyEvalInfo = EvaluatedFormMPBall EvaluatedFormR {form = formTrue, exprValues = Map.empty, formValues = Map.empty},
           BP.maxThreads,
           BP.shouldLog
         }
@@ -145,14 +140,16 @@ lppBranchAndPrune (sampleR :: r) (LPPBPParams {..}) = do
     dummyPriorityQueue = BoxStack [problem]
 
 instance
-  (CanEval r, HasKleeneanComparison r, Applicative m) =>
-  BP.CanPrune m r Form Box Boxes (EvaluatedForm r)
+  (Applicative m) =>
+  BP.CanPrune m EvalArithmetic Form Box Boxes EvaluatedForm
   where
-  pruneProblemM sampleR (BP.Problem {scope, constraint}) =
+  pruneProblemM evalArithmetic (BP.Problem {scope, constraint}) =
     pure (pavingP, simplificationResult.evaluatedForm)
     where
-      simplificationResult = simplifyEvalForm sampleR scope constraint
-      simplifiedForm = simplificationResult.evaluatedForm.form
+      simplificationResult = simplifyEvalForm evalArithmetic scope constraint
+      simplifiedForm = case simplificationResult.evaluatedForm of
+        EvaluatedFormMPBall (EvaluatedFormR {form}) -> form
+        EvaluatedFormAffine (EvaluatedFormR {form}) -> form
       -- remove unused variables from the split order:
       simplifiedScope = boxRestrictSplitOrder (formVariables simplifiedForm) scope
       simplifiedFormProblem = BP.Problem {scope = simplifiedScope, constraint = simplifiedForm}
