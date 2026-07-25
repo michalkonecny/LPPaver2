@@ -2,11 +2,12 @@
   import { computed, ref, watch, type DeepReadonly } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useStepsStore } from './steps/stepsStore';
-  import { useProverStore, type Arithmetic, type ParamSpec } from './proverLink/proverStore.ts';
+  import { useProverStore } from './proverLink/proverStore.ts';
+  import type { Arithmetic, ParamSpec } from './proverLink/proverMessage.ts';
 
   const stepsStore = useStepsStore();
   const proverStore = useProverStore();
-  const { currentRunId, runs } = storeToRefs(proverStore);
+  const { currentRunId } = storeToRefs(proverStore);
 
   const currentRunInfo = computed(() => {
     if (!currentRunId.value) return null;

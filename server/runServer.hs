@@ -50,7 +50,7 @@ requestResponse :: MVar ServerState -> WS.Connection -> IO ()
 requestResponse stateMVar conn = do
   putStrLn "waiting for message from client..."
   msg <- WS.receiveData conn :: IO Text
-  putStrLn $ "Received message: " ++ T.unpack msg
+  -- putStrLn $ "Received message: " ++ T.unpack msg
   -- TODO: fork ?
   request <- parseRequest msg
   modifyMVar stateMVar $ \state -> do
@@ -60,7 +60,7 @@ requestResponse stateMVar conn = do
     respond :: Response -> IO ()
     respond response = do
       let responseJSON = A.encode response
-      putStrLn $ "Sending response: " ++ TL.unpack (TL.decodeUtf8 responseJSON)
+      -- putStrLn $ "Sending response: " ++ TL.unpack (TL.decodeUtf8 responseJSON)
       WS.sendTextData conn responseJSON
 
 ------------------------
@@ -87,10 +87,10 @@ instance IsRequestResponse GetExampleProblemsRequest where
     pure newState
 
 instance A.FromJSON GetExampleProblemsRequest where
-  parseJSON = A.genericParseJSON A.defaultOptions {A.tagSingleConstructors = True}
+  parseJSON = A.genericParseJSON aesonOptions
 
 instance A.ToJSON ExampleProblemsResponse where
-  toEncoding = A.genericToEncoding A.defaultOptions
+  toEncoding = A.genericToEncoding aesonOptions
 
 --------------------------------
 --- Formula/expression nodes ---
@@ -112,10 +112,44 @@ instance IsRequestResponse GetAllFormulaNodesRequest where
     pure state
 
 instance A.FromJSON GetAllFormulaNodesRequest where
-  parseJSON = A.genericParseJSON A.defaultOptions {A.tagSingleConstructors = True}
+  parseJSON = A.genericParseJSON aesonOptions
 
 instance A.ToJSON FormulaNodesResponse where
-  toEncoding = A.genericToEncoding A.defaultOptions
+  toEncoding = A.genericToEncoding aesonOptions
+
+--------------------------------
+--- Steps ---
+--------------------------------
+
+newtype GetStepsRequest = GetStepsRequest {runId :: RunID}
+  deriving (Generic, Show)
+
+data StepsResponse = StepsResponse
+  { runId :: RunID,
+    steps :: [LPPStep],
+    boxes :: BoxStore
+  }
+  deriving (Generic)
+
+instance IsRequestResponse GetStepsRequest where
+  type ResponseType GetStepsRequest = StepsResponse
+  handleRequest state request respond = do
+    let runId = request.runId
+    case Map.lookup runId state.runs of
+      Nothing -> do
+        putStrLn $ "No run found for runId: " ++ show runId
+        respond $ StepsResponse {runId = runId, steps = [], boxes = state.boxes}
+        pure state
+      Just runInfo -> do
+        putStrLn $ "Returning steps for runId: " ++ show runId
+        respond $ StepsResponse {runId = runId, steps = runInfo.runSteps, boxes = state.boxes}
+        pure state
+
+instance A.FromJSON GetStepsRequest where
+  parseJSON = A.genericParseJSON aesonOptions
+
+instance A.ToJSON StepsResponse where
+  toEncoding = A.genericToEncoding aesonOptions
 
 ------------------------------------------------
 --- Running the solver and returning results ---
@@ -161,7 +195,6 @@ data SolverRunStatusUpdate = SolverRunStatusUpdate
 instance IsRequestResponse RunSolverRequest where
   type ResponseType RunSolverRequest = SolverRunStatusUpdate
   handleRequest state request respond = do
-    putStrLn $ "Received RunSolverRequest: " ++ show request
     let runId = request.runId
     respond (SolverRunStatusUpdate {runId, status = SolverRunning})
     let params = mkParams request
@@ -175,7 +208,7 @@ lppStepsController :: (MonadIO m) => RunID -> MVar ServerState -> BP.StepsContro
 lppStepsController runId stateMV =
   BP.StepsController {reportStep}
   where
-    reportStep step = liftIO $ do 
+    reportStep step = liftIO $ do
       modifyMVar_ stateMV (pure . addStepToState step)
       putStrLn $ "Step for runId " ++ show runId ++ ": " ++ show step
     -- This is the only place where stateMV is modified.
@@ -212,16 +245,16 @@ mkParams request =
       Nothing -> error $ "Problem not found: " ++ request.problemName
 
 instance A.FromJSON RunSolverRequest where
-  parseJSON = A.genericParseJSON A.defaultOptions
+  parseJSON = A.genericParseJSON aesonOptions
 
 instance A.FromJSON Arithmetic where
-  parseJSON = A.genericParseJSON A.defaultOptions
+  parseJSON = A.genericParseJSON aesonOptions
 
 instance A.ToJSON SolverRunStatus where
-  toEncoding = A.genericToEncoding A.defaultOptions
+  toEncoding = A.genericToEncoding aesonOptions
 
 instance A.ToJSON SolverRunStatusUpdate where
-  toEncoding = A.genericToEncoding A.defaultOptions
+  toEncoding = A.genericToEncoding aesonOptions
 
 ------------------------------------------------
 --- Request/Response boilerplate and parsing ---
@@ -239,12 +272,14 @@ data Request
   = RequestGetExampleProblems GetExampleProblemsRequest
   | RequestGetAllFormulaNodes GetAllFormulaNodesRequest
   | RequestRunSolver RunSolverRequest
-  deriving (Generic)
+  | RequestGetSteps GetStepsRequest
+  deriving (Generic, Show)
 
 data Response
   = ResponseExampleProblems ExampleProblemsResponse
   | ResponseFormulaNodes FormulaNodesResponse
   | ResponseSolverRunStatusUpdate SolverRunStatusUpdate
+  | ResponseSteps StepsResponse
   deriving (Generic)
 
 instance IsRequestResponse Request where
@@ -255,30 +290,25 @@ instance IsRequestResponse Request where
     handleRequest state req (respond . ResponseFormulaNodes)
   handleRequest state (RequestRunSolver req) respond = do
     handleRequest state req (respond . ResponseSolverRunStatusUpdate)
+  handleRequest state (RequestGetSteps req) respond = do
+    handleRequest state req (respond . ResponseSteps)
+
+instance A.FromJSON Request where
+  parseJSON = A.genericParseJSON aesonOptions
 
 parseRequest :: Text -> IO Request
 parseRequest msg =
   let msgBS = T.encodeUtf8 msg
    in case A.eitherDecodeStrict msgBS of
         Right req -> do
-          putStrLn $ "Parsed GetExampleProblemsRequest: " ++ show req
-          return (RequestGetExampleProblems req)
-        Left err1 -> do
-          case A.eitherDecodeStrict msgBS of
-            Right req -> do
-              putStrLn $ "Parsed GetAllFormulaNodesRequest: " ++ show req
-              return (RequestGetAllFormulaNodes req)
-            Left err2 -> do
-              case A.eitherDecodeStrict msgBS of
-                Right req -> do
-                  putStrLn $ "Parsed RunSolverRequest: " ++ show req
-                  return (RequestRunSolver req)
-                Left err3 -> do
-                  putStrLn "Failed to parse request"
-                  putStrLn $ "Error parsing as GetExampleProblemsRequest: " ++ err1
-                  putStrLn $ "Error parsing as GetAllFormulaNodesRequest: " ++ err2
-                  putStrLn $ "Error parsing as RunSolverRequest: " ++ err3
-                  fail "Invalid request"
+          putStrLn $ "Parsed: " ++ show req
+          return req
+        Left err -> do
+          putStrLn $ "Failed to parse request: " ++ err
+          fail $ "Failed to parse request: " ++ err
 
 instance A.ToJSON Response where
-  toEncoding = A.genericToEncoding A.defaultOptions
+  toEncoding = A.genericToEncoding aesonOptions
+
+aesonOptions :: A.Options
+aesonOptions = A.defaultOptions

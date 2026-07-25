@@ -2,49 +2,25 @@ import { defineStore } from 'pinia';
 import { reactive, readonly, ref, watch, type DeepReadonly, type Ref } from 'vue';
 import _ from 'lodash';
 import { getProverWS } from './proverWS';
-import type { Problem } from '@/problems/problems';
 import type { Box, BoxHash } from '@/boxes/boxes';
 import { exprHashToExpr, type Expr, type ExprF, type ExprHash } from '@/formulas/exprs';
 import { formHashToForm, type Form, type FormF, type FormHash } from '@/formulas/forms';
-
-export type ProblemWithParamSpec = {
-  problem: Problem;
-  paramSpecs: ParamSpec[];
-};
-
-export type ParamSpec = {
-  paramName: string;
-  defaultValue: number;
-  minValue: number;
-  maxValue: number;
-};
-
-export type RunStatus = 'RequestSent' | 'SolverRunning' | 'SolverFinished';
+import {
+  type ProblemWithParamSpec,
+  type Arithmetic,
+  type RunStatus,
+  type ProverResponse,
+  type ProverRequest,
+  sendProverRequest,
+} from './proverMessage';
+import type { Step } from '@/steps/steps';
 
 export type RunInfo = {
   runId: string;
   problemName: string;
   paramValues: Record<string, number>;
   status: RunStatus;
-  // TODO: add steps
-};
-
-// Haskell definition:
-// data Arithmetic
-//   = BallArithmetic {precision :: Integer}
-//   | AffineArithmetic {precision :: Integer, maxTerms :: Int}
-
-export type Arithmetic =
-  | { tag: 'BallArithmetic'; precision: number }
-  | { tag: 'AffineArithmetic'; precision: number; maxTerms: number };
-
-export type RunSolverRequest = {
-  runId: string;
-  problemName: string;
-  paramValues: Record<string, number>;
-  arithmetic: Arithmetic;
-  giveUpAccuracy: number;
-  numberOfThreads: number;
+  steps: Step[];
 };
 
 export const useProverStore = defineStore('prover', () => {
@@ -93,26 +69,30 @@ export const useProverStore = defineStore('prover', () => {
     paramValues: Record<string, number>,
     arithmetic: Arithmetic,
     giveUpAccuracy: number,
-    numberOfThreads: number = 4,
+    numberOfThreads: number = 1,
   ) {
     const ws = await getProverWS();
     const runId = generateRunId();
-    const message: RunSolverRequest = {
-      runId,
-      problemName,
-      paramValues,
-      arithmetic,
-      giveUpAccuracy,
-      numberOfThreads,
+    const message: ProverRequest = {
+      tag: 'RequestRunSolver',
+      contents: {
+        runId,
+        problemName,
+        paramValues,
+        arithmetic,
+        giveUpAccuracy,
+        numberOfThreads,
+      },
     };
 
-    ws.send(JSON.stringify(message));
+    sendProverRequest(ws, message);
 
     runs.value[runId] = reactive({
       runId,
       problemName,
       paramValues,
       status: 'RequestSent',
+      steps: [], // TODO: try this out
     });
 
     currentRunId.value = runId;
@@ -138,7 +118,7 @@ export const useProverStore = defineStore('prover', () => {
     ws.addEventListener('message', (ws, event) => {
       // console.log(`ws message event:`, event);
 
-      const message: ProverMessage = JSON.parse(event.data);
+      const message: ProverResponse = JSON.parse(event.data);
       console.log(`ws message:`, message);
       switch (message.tag) {
         case 'ResponseExampleProblems': {
@@ -155,8 +135,34 @@ export const useProverStore = defineStore('prover', () => {
           const { runId, status } = message.contents;
           if (runs.value[runId]) {
             runs.value[runId].status = status;
+            if (status === 'SolverFinished') {
+              const message: ProverRequest = {
+                tag: 'RequestGetSteps',
+                contents: {
+                  runId,
+                },
+              };
+              // request the steps
+              sendProverRequest(ws, message);
+            }
           } else {
             console.warn(`Received run status for unknown runId ${runId}`);
+          }
+          break;
+        }
+        case 'ResponseSteps': {
+          const { runId, steps, boxes: newBoxes } = message.contents;
+          boxes.value = { ...boxes.value, ...newBoxes };
+          if (runs.value[runId]) {
+            // store the steps for this run
+            runs.value[runId].steps = steps;
+            // update all formula nodes in case there are new ones arising due to formula simplifications in the steps
+            sendProverRequest(ws, {
+              tag: 'RequestGetAllFormulaNodes',
+              contents: [],
+            });
+          } else {
+            console.warn(`Received steps for unknown runId ${runId}`);
           }
           break;
         }
@@ -176,7 +182,11 @@ export const useProverStore = defineStore('prover', () => {
   // whenever exampleProblems is assigned, request all formula nodes
   watch(exampleProblems, async () => {
     const ws = await getProverWS();
-    ws.send(JSON.stringify('GetAllFormulaNodesRequest'));
+    const message: ProverRequest = {
+      tag: 'RequestGetAllFormulaNodes',
+      contents: [],
+    };
+    sendProverRequest(ws, message);
   });
 
   // request example problems on store initialisation
@@ -184,31 +194,12 @@ export const useProverStore = defineStore('prover', () => {
 
   async function requestExampleProblems() {
     const ws = await getProverWS();
-    ws.send(JSON.stringify('GetExampleProblemsRequest'));
+    const message: ProverRequest = {
+      tag: 'RequestGetExampleProblems',
+      contents: [],
+    };
+    sendProverRequest(ws, message);
   }
 
   return exports;
 });
-
-type ProverMessage =
-  | {
-      tag: 'ResponseExampleProblems';
-      contents: {
-        problems: Record<string, ProblemWithParamSpec>;
-        boxes: Record<BoxHash, Box>;
-      };
-    }
-  | {
-      tag: 'ResponseFormulaNodes';
-      contents: {
-        exprs: Record<ExprHash, ExprF<ExprHash>>;
-        forms: Record<FormHash, FormF<ExprHash, FormHash>>;
-      };
-    }
-  | {
-      tag: 'ResponseSolverRunStatusUpdate';
-      contents: {
-        runId: string;
-        status: RunStatus;
-      };
-    };
