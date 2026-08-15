@@ -31,19 +31,24 @@ export const useStepsStore = defineStore('steps', () => {
     focusedProblem,
     focusedProblemSubFormExpr,
     zoomedProblem,
-    setProblem,
+    previewProblem,
+    setInitProblem,
     stepFromProblem,
     focusedExprValues,
   };
 
-  async function setProblem(problem: Problem) {
-    const problemHash = problemToProblemHash(problem);
+  async function previewProblem(problem: Problem) {
     const step: Step = { tag: 'GiveUpOnProblemStep', problem };
     steps.value.push(step);
+    const problemHash = problemToProblemHash(problem);
     _problem2step.value[problemHash] = step;
-    rootProblem.value = problem;
-    zoomedProblem.value = problem;
-    focusedProblem.value = problem;
+    setInitProblem(problem);
+  }
+
+  async function setInitProblem(initProblem: Problem) {
+    rootProblem.value = initProblem;
+    zoomedProblem.value = initProblem;
+    focusedProblem.value = initProblem;
   }
 
   function stepFromProblem(p: Problem) {
@@ -66,20 +71,23 @@ export const useStepsStore = defineStore('steps', () => {
 
   watch(currentRunSteps, () => {
     if (!currentRunSteps.value) return;
-    steps.value = currentRunSteps.value;
-    numberOfSteps.value = currentRunSteps.value.length;
+    const stepsExceptInit = currentRunSteps.value.filter((step) => step.tag !== 'InitStep');
+    steps.value = stepsExceptInit;
+    numberOfSteps.value = stepsExceptInit.length;
     _problem2step.value = {};
-    // for all steps...
-    for (const step of currentRunSteps.value) {
+    // build the problem2step mapping for all steps except InitStep
+    for (const step of stepsExceptInit) {
       const problem = getStepProblem(step);
       if (problem) {
-        // store the step for this problem
         const problemHash = problemToProblemHash(problem);
         _problem2step.value[problemHash] = step;
-        // if this is the first step, set it as the root problem
-        if (step.tag === 'InitStep') {
-          setProblem(problem);
-        }
+      }
+    }
+    // set the root problem to the problem of the first step (if it exists)
+    if (stepsExceptInit.length > 0) {
+      const firstStepProblem = getStepProblem(stepsExceptInit[0]!);
+      if (firstStepProblem) {
+        setInitProblem(firstStepProblem);
       }
     }
   });

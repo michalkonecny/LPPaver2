@@ -72,7 +72,7 @@
 
   watch(selectedProblem, (newProblem) => {
     if (newProblem) {
-      stepsStore.setProblem(newProblem.problem);
+      stepsStore.previewProblem(newProblem.problem);
       params.value = newProblem.paramSpecs.map((spec) => ({
         spec,
         val: spec.defaultValue,
