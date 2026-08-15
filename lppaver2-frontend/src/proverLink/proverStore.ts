@@ -32,11 +32,11 @@ export const useProverStore = defineStore('prover', () => {
   const currentRunId: Ref<string | null> = ref(null);
 
   const exports = {
-    exampleProblems: readonly(exampleProblems),
-    boxes: readonly(boxes),
-    exprs: readonly(exprs),
-    forms: readonly(forms),
-    runs: readonly(runs),
+    exampleProblems,
+    boxes,
+    exprs,
+    forms,
+    runs,
     currentRunId: currentRunId,
     getBox,
     getExpr,
@@ -69,7 +69,7 @@ export const useProverStore = defineStore('prover', () => {
     paramValues: Record<string, number>,
     arithmetic: Arithmetic,
     giveUpAccuracy: number,
-    numberOfThreads: number = 1,
+    numberOfThreads: number = 4,
   ) {
     const ws = await getProverWS();
     const runId = generateRunId();
