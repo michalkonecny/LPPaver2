@@ -5,6 +5,7 @@
 
 module LPPaver2.ExampleProblems
   ( exampleProblems,
+    exampleProblemsList,
     LPPProblemWithParamSpec (..),
     ParamSpec (..),
     substituteParams,
@@ -62,7 +63,10 @@ epsParam prob =
 
 exampleProblems :: Map.Map String LPPProblemWithParamSpec
 exampleProblems =
-  Map.fromList
+  Map.fromList exampleProblemsList
+
+exampleProblemsList :: [(String, LPPProblemWithParamSpec)]
+exampleProblemsList =
     [ ( "transitivityEps",
         epsParam
           $ Problem

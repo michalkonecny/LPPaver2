@@ -16,14 +16,11 @@ import Control.Monad.Logger (runStdoutLoggingT)
 import Data.Aeson qualified as A
 import Data.Map qualified as Map
 import Data.Text (Text)
-import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
-import Data.Text.Lazy qualified as TL
-import Data.Text.Lazy.Encoding qualified as TL
 import GHC.Generics (Generic)
 import GHC.Records
 import LPPaver2.BranchAndPrune (LPPBPParams (..), LPPStep, getStepBoxes, getStepExprs, getStepForms, lppBranchAndPrune)
-import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), exampleProblems, substituteParams)
+import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), exampleProblems, exampleProblemsList, substituteParams)
 import LPPaver2.Export ()
 import LPPaver2.RealConstraints (EvalArithmetic (..), ExprStore, FormStore)
 import LPPaver2.RealConstraints.Boxes (BoxStore)
@@ -71,7 +68,7 @@ data GetExampleProblemsRequest = GetExampleProblemsRequest
   deriving (Generic, Show)
 
 data ExampleProblemsResponse = ExampleProblemsResponse
-  { problems :: Map.Map String LPPProblemWithParamSpec,
+  { problems :: [(String, LPPProblemWithParamSpec)],
     boxes :: BoxStore
   }
   deriving (Generic)
@@ -79,9 +76,9 @@ data ExampleProblemsResponse = ExampleProblemsResponse
 instance IsRequestResponse GetExampleProblemsRequest where
   type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
   handleRequest state _ respond = do
-    let problems = exampleProblems
-    let scopes = map (\p -> p.problem.scope) $ Map.elems problems
-    let problemForms = map (\p -> p.problem.constraint) $ Map.elems problems
+    let problems = exampleProblemsList
+    let scopes = map (\(_, p) -> p.problem.scope) problems
+    let problemForms = map (\(_, p) -> p.problem.constraint) problems
     let newState = ServerState.addBoxes scopes $ ServerState.addForms problemForms state
     respond $ ExampleProblemsResponse {problems = problems, boxes = newState.boxes}
     pure newState

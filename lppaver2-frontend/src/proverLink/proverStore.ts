@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { reactive, readonly, ref, watch, type DeepReadonly, type Ref } from 'vue';
+import { computed, reactive, readonly, ref, watch, type DeepReadonly, type Ref } from 'vue';
 import _ from 'lodash';
 import { getProverWS } from './proverWS';
 import type { Box, BoxHash } from '@/boxes/boxes';
@@ -24,15 +24,17 @@ export type RunInfo = {
 };
 
 export const useProverStore = defineStore('prover', () => {
-  const exampleProblems: Ref<Record<string, ProblemWithParamSpec>> = ref({});
+  const exampleProblemsList: Ref<Array<[string, ProblemWithParamSpec]>> = ref([]);
   const boxes: Ref<Record<BoxHash, Box>> = ref({});
   const exprs: Ref<Record<ExprHash, ExprF<ExprHash>>> = ref({});
   const forms: Ref<Record<FormHash, FormF<ExprHash, FormHash>>> = ref({});
   const runs: Ref<Record<string, RunInfo>> = ref({});
   const currentRunId: Ref<string | null> = ref(null);
 
+  const exampleProblems = computed(() => Object.fromEntries(exampleProblemsList.value));
+
   const exports = {
-    exampleProblems,
+    exampleProblemsList,
     boxes,
     exprs,
     forms,
@@ -43,6 +45,7 @@ export const useProverStore = defineStore('prover', () => {
     getForm,
     startRun,
     getRunInfo,
+    exampleProblems,
   };
 
   function getExpr(exprHash: ExprHash): Expr {
@@ -122,7 +125,7 @@ export const useProverStore = defineStore('prover', () => {
       console.log(`ws message:`, message);
       switch (message.tag) {
         case 'ResponseExampleProblems': {
-          exampleProblems.value = message.contents.problems;
+          exampleProblemsList.value = message.contents.problems;
           boxes.value = { ...boxes.value, ...message.contents.boxes };
           break;
         }

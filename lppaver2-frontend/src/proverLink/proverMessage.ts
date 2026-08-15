@@ -10,7 +10,7 @@ import type { Websocket } from 'websocket-ts';
 export type GetExampleProblemsRequest = [];
 
 export type ExampleProblemsResponse = {
-  problems: Record<string, ProblemWithParamSpec>;
+  problems: Array<[string, ProblemWithParamSpec]>;
   boxes: Record<BoxHash, Box>;
 };
 

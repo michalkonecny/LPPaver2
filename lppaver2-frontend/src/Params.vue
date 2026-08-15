@@ -87,7 +87,7 @@
     <div class="mb-2">
       <select class="form-select" v-model="selectedProblemName">
         <option :value="null">Select a problem</option>
-        <option v-for="(p, name) in proverStore.exampleProblems" :key="name" :value="name">
+        <option v-for="([name, p], i) in proverStore.exampleProblemsList" :key="name" :value="name">
           {{ name }}
         </option>
       </select>
