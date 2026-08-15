@@ -14,27 +14,32 @@
 
   const { focusedProblem, zoomedProblem } = storeToRefs(stepsStore);
 
-  const step = stepsStore.stepFromProblem(props.problem);
+  const step = computed(() => stepsStore.stepFromProblem(props.problem));
 
-  const stepTruth = getStepTruthResult(step);
+  const stepLabel = computed(() => {
+    const stepTag = step.value.tag;
+    const progressPaving = stepTag === 'ProgressStep' ? step.value.progressPaving : undefined;
 
-  const stepTruthNote =
-    stepTruth === 'CertainTrue' ? ' (True)' : stepTruth === 'CertainFalse' ? ' (False)' : '';
+    const stepCategory = //
+      !progressPaving
+        ? stepTag
+        : progressPaving.undecided.length == 0
+          ? 'Decided'
+          : progressPaving.inner.boxes.length > 0
+            ? 'Prune True'
+            : progressPaving.outer.boxes.length > 0
+              ? 'Prune False'
+              : 'Split';
 
-  const stepCategory =
-    step.tag === 'ProgressStep'
-      ? step.progressPaving.undecided.length == 0
-        ? 'Decided'
-        : step.progressPaving.inner.boxes.length > 0
-          ? 'Prune True'
-          : step.progressPaving.outer.boxes.length > 0
-            ? 'Prune False'
-            : 'Split'
-      : step.tag;
+    const stepTruth = getStepTruthResult(step.value);
 
-  const stepLabel = `${stepCategory}${stepTruthNote}`;
+    const stepTruthNote =
+      stepTruth === 'CertainTrue' ? ' (True)' : stepTruth === 'CertainFalse' ? ' (False)' : '';
 
-  const subProblems = getSubProblems(step);
+    return `${stepCategory}${stepTruthNote}`;
+  });
+
+  const subProblems = computed(() => getSubProblems(step.value));
 
   const isFocused = computed(() => sameProblem(props.problem, focusedProblem.value));
   const isZoomed = computed(() => sameProblem(props.problem, zoomedProblem.value));
