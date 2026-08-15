@@ -113,15 +113,12 @@ shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
 lppBranchAndPrune ::
   ( MonadLogger m,
     MonadUnliftIO m
-    -- CanEval r,
-    -- HasKleeneanComparison r
   ) =>
   EvalArithmetic ->
   BP.StepsController m LPPStep ->
   LPPBPParams ->
   m LPPBPResult
 lppBranchAndPrune evalArithmetic lppStepsController (LPPBPParams {..}) = do
-  -- conn <- liftIO $ Redis.checkedConnect Redis.defaultConnectInfo
   BP.branchAndPruneM
     lppStepsController
     ( BP.Params
