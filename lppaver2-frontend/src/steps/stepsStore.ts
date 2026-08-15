@@ -1,10 +1,11 @@
-import { defineStore } from 'pinia';
-import { computed, ref, type Ref } from 'vue';
+import { defineStore, storeToRefs } from 'pinia';
+import { computed, ref, watch, type Ref } from 'vue';
 import type { ExprValue } from '@/formulas/evalInfo';
 import { problemToProblemHash, type Problem, type ProblemHash } from '@/problems/problems';
 import { type ExprHash } from '../formulas/exprs';
 import { type FormOrExprHash } from '../formulas/forms';
-import { type Step } from './steps';
+import { getStepProblem, type Step } from './steps';
+import { useProverStore } from '@/proverLink/proverStore';
 
 export const useStepsStore = defineStore('steps', () => {
   const steps: Ref<Step[]> = ref([]);
@@ -53,6 +54,35 @@ export const useStepsStore = defineStore('steps', () => {
     }
     return step;
   }
+
+  // track the steps of the current run
+  const proverStore = useProverStore();
+  const { runs, currentRunId } = storeToRefs(proverStore);
+  const currentRunSteps = computed(() => {
+    const steps = runs.value[currentRunId.value ?? '']?.steps;
+    if (!steps || steps.length == 0) return undefined;
+    return steps;
+  });
+
+  watch(currentRunSteps, () => {
+    if (!currentRunSteps.value) return;
+    steps.value = currentRunSteps.value;
+    numberOfSteps.value = currentRunSteps.value.length;
+    _problem2step.value = {};
+    // for all steps...
+    for (const step of currentRunSteps.value) {
+      const problem = getStepProblem(step);
+      if (problem) {
+        // store the step for this problem
+        const problemHash = problemToProblemHash(problem);
+        _problem2step.value[problemHash] = step;
+        // if this is the first step, set it as the root problem
+        if (step.tag === 'InitStep') {
+          setProblem(problem);
+        }
+      }
+    }
+  });
 
   return exports;
 });
