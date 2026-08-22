@@ -123,9 +123,9 @@ addParamValuesToBox paramVarValues box =
     -- Not adding these parameter variables to volumeVars or splitOrder
     -- since they do not contribute to the volume of the box and cannot be split.
   where
-    paramVarDomains = Map.map double2ball paramVarValues
-    double2ball :: Rational -> MPBall
-    double2ball = MP.mpBallP (MP.prec 100)
+    paramVarDomains = Map.map rational2ball paramVarValues
+    rational2ball :: Rational -> MPBall
+    rational2ball = MP.mpBallP (MP.prec 100)
 
 boxAreaD :: Box -> Double
 boxAreaD box =

@@ -99,7 +99,7 @@ exampleProblemsList =
         epsParam
           $ Problem
             { scope = mkBox [("x", (0.0, 1.0)), ("y", (0.0, 1.0))],
-              constraint = (sqrt (x * x + y * y) <= 1.0) || (sqrt (x * x + y * y) > 1.0 + eps)
+              constraint = (sqrt (x * x + y * y) <= 1.0) || (sqrt (x * x + y * y) > 1.0 - eps)
             }
       ),
       ( "quadraticReduction",

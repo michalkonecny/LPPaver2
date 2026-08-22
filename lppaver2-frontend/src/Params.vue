@@ -44,7 +44,7 @@
         };
   });
 
-  const giveUpAccuracy = ref<number>(0.001);
+  const giveUpAccuracy = ref<number>(0.01);
 
   type ParamValue = {
     spec: DeepReadonly<ParamSpec>;
