@@ -10,6 +10,7 @@ import AERN2.MP (HasPrecision (..), mpBallP)
 import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 import Debug.Trace (trace)
 import GHC.Records
 import LPPaver2.RealConstraints (ExprF (..))
@@ -107,9 +108,12 @@ extractIEsFromCIE form0 = aux form0.root
         _ -> error "extractIEsFromCIE: not a CIE form"
 
 linearPruneCIE :: Box -> [Form] -> Maybe LinearPruneResult
-linearPruneCIE scope ies
-  | isImprovement = Just result
-  | otherwise = Nothing
+linearPruneCIE scope ies =
+  -- trace (printf "linearPruneCIE: scope = %s, ies = %s" (show scope) (show ies)) $
+  -- trace (printf "  varDomains = %s" (show varDomains)) $
+  -- trace (printf "  varDomainsWithInequalities = %s" (show varDomainsWithInequalities)) $
+  -- trace (printf "  isImprovement = %s" (show isImprovement)) $
+  if isImprovement then Just result else Nothing
   where
     varBoundsFromInequalities = P.concatMap extractVarBound ies
       where
@@ -123,8 +127,9 @@ linearPruneCIE scope ies
                 (ExprLit q, CompLeq, ExprVar var) -> [(var, (Just q, Nothing))]
                 _ -> []
             _ -> [] -- not a comparison, shouldn't happen since we only call this on IEs
-    varDomains = scope.box_.varDomains
-    varDomainsWithInequalities = foldl applyBound varDomains varBoundsFromInequalities
+    volumeVarDomains = -- pick domains of volume variables only, since parameter variables cannot be pruned
+      Map.filterWithKey (\k _ -> k `Set.member` scope.box_.volumeVars) scope.box_.varDomains
+    varDomainsWithInequalities = foldl applyBound volumeVarDomains varBoundsFromInequalities
       where
         applyBound varDoms (var, (Just qL, _)) =
           Map.update (updateLower qL) var varDoms
@@ -171,7 +176,7 @@ linearPruneCIE scope ies
       res
       where
         res = P.any (> 0.1) $ Map.elems improvements
-        improvements = Map.intersectionWith measureImprovement varDomains varDomainsWithInequalities
+        improvements = Map.intersectionWith measureImprovement volumeVarDomains varDomainsWithInequalities
         measureImprovement ballOld ballNew =
           let rOld = MP.radius ballOld
               rNew = MP.radius ballNew
