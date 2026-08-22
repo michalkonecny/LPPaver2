@@ -4,8 +4,10 @@
   import { useStepsStore } from './steps/stepsStore';
   import { useProverStore } from './proverLink/proverStore.ts';
   import type { Arithmetic, ParamSpec } from './proverLink/proverMessage.ts';
+  import { getTruthColour } from './styling.ts';
 
   const stepsStore = useStepsStore();
+  const { numberOfSteps, stepsStats } = storeToRefs(stepsStore);
   const proverStore = useProverStore();
   const { currentRunId } = storeToRefs(proverStore);
 
@@ -131,8 +133,21 @@
   </div>
   <div class="d-flex align-items-baseline">
     <div class="mx-2">
-      <span v-if="currentRunStatus">Current run status: {{ currentRunStatus }}</span>
-      <span v-else>No run in progress</span>
+      <span v-if="currentRunStatus === 'RequestSent'">Run in progress...</span>
+      <span v-else-if="currentRunStatus === 'SolverRunning'">Run in progress...</span>
+      <span v-else-if="currentRunStatus === 'SolverFinished'">Run finished</span>
+    </div>
+    <div v-if="stepsStats" class="d-flex align-items-baseline gap-2">
+      <span class="p-1">{{ numberOfSteps }} step(s)</span>
+      <span class="p-1" :style="{ backgroundColor: getTruthColour('CertainTrue') }"
+        >Inner: {{ stepsStats.percentInner.toFixed(2) }}%
+      </span>
+      <span class="p-1" :style="{ backgroundColor: getTruthColour('CertainFalse') }"
+        >Outer: {{ stepsStats.percentOuter.toFixed(2) }}%
+      </span>
+      <span class="p-1" :style="{ backgroundColor: getTruthColour('TrueOrFalse') }"
+        >Unknown: {{ stepsStats.percentUnknown.toFixed(2) }}%
+      </span>
     </div>
   </div>
 </template>

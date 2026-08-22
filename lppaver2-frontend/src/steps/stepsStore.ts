@@ -6,6 +6,13 @@ import { type ExprHash } from '../formulas/exprs';
 import { type FormOrExprHash } from '../formulas/forms';
 import { getStepProblem, type Step } from './steps';
 import { useProverStore } from '@/proverLink/proverStore';
+import { getBoxVolume } from '@/boxes/boxes';
+
+export type ProverStateStats = {
+  percentInner: number;
+  percentOuter: number;
+  percentUnknown: number;
+};
 
 export const useStepsStore = defineStore('steps', () => {
   const steps: Ref<Step[]> = ref([]);
@@ -23,6 +30,41 @@ export const useStepsStore = defineStore('steps', () => {
     return step.evalInfo.exprValues;
   });
 
+  const stepsStats = computed<ProverStateStats | undefined>(() => {
+    if (!rootProblem.value) return undefined;
+
+    // compute the total volume of the root problem's box
+    const proverStore = useProverStore();
+    const rootBox = proverStore.getBox(rootProblem.value.scope);
+    const totalVolume = getBoxVolume(rootBox);
+
+    // compute the volumes of the boxes in the steps
+    let volumeInner = 0;
+    let volumeOuter = 0;
+    let volumeUnknown = 0;
+    steps.value.forEach((step) => {
+      if (step.tag === 'ProgressStep') {
+        // progress steps
+        step.progressPaving.inner.boxes.forEach((boxH) => {
+          const box = proverStore.getBox(boxH);
+          volumeInner += getBoxVolume(box);
+        });
+        step.progressPaving.outer.boxes.forEach((boxH) => {
+          const box = proverStore.getBox(boxH);
+          volumeOuter += getBoxVolume(box);
+        });
+      } else if (step.tag === 'GiveUpOnProblemStep') {
+        volumeUnknown += getBoxVolume(proverStore.getBox(step.problem.scope));
+      }
+    });
+
+    return {
+      percentInner: (100 * volumeInner) / totalVolume,
+      percentOuter: (100 * volumeOuter) / totalVolume,
+      percentUnknown: (100 * volumeUnknown) / totalVolume,
+    };
+  });
+
   const exports = {
     steps,
     numberOfSteps,
@@ -35,6 +77,7 @@ export const useStepsStore = defineStore('steps', () => {
     setInitProblem,
     stepFromProblem,
     focusedExprValues,
+    stepsStats,
   };
 
   async function previewProblem(problem: Problem) {

@@ -9,6 +9,7 @@ export type VarDomains = Record<Var, Interval<number>>;
 export type Box_ = {
   varDomains: VarDomains;
   splitOrder: Var[];
+  volumeVars: Var[];
   except?: VarDomains;
 };
 
@@ -20,6 +21,29 @@ export type Box = {
 export type Boxes = {
   boxes: BoxHash[];
 };
+
+export function getBoxVolume(box: Box): number {
+  let outlineVolume = 1;
+  for (const varName of box.box_.volumeVars) {
+    const interval = box.box_.varDomains[varName];
+    if (interval !== undefined) {
+      outlineVolume *= interval.u - interval.l;
+    }
+  }
+
+  let exceptVolume = 0;
+  if (box.box_.except) {
+    exceptVolume = 1;
+    for (const varName of Object.keys(box.box_.except)) {
+      const interval = box.box_.except[varName];
+      if (interval !== undefined) {
+        exceptVolume *= interval.u - interval.l;
+      }
+    }
+  }
+
+  return outlineVolume - exceptVolume;
+}
 
 export function pickXY(box: Box): { xVar: Var; yVar: Var } {
   const vars = Object.keys(box.box_.varDomains ?? {});
