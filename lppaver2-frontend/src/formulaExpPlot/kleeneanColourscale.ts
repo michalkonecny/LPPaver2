@@ -1,4 +1,4 @@
-import { getTruthColour } from "@/steps/stepsStore";
+import { getTruthColour } from '@/styling';
 
 export function getKleeneanColourscale(
   intensity: number[],
@@ -6,9 +6,9 @@ export function getKleeneanColourscale(
 ): Plotly.ColorScale {
   const minIntensity = Math.min(...intensity);
   const maxIntensity = Math.max(...intensity);
-  const trueColour = getTruthColour("CertainTrue");
-  const falseColour = getTruthColour("CertainFalse");
-  const unknownColour = getTruthColour("TrueOrFalse");
+  const trueColour = getTruthColour('CertainTrue');
+  const falseColour = getTruthColour('CertainFalse');
+  const unknownColour = getTruthColour('TrueOrFalse');
   if (minIntensity > middleIntensity) {
     // all values are CertainTrue
     return [
@@ -21,10 +21,7 @@ export function getKleeneanColourscale(
       [0, falseColour],
       [1, falseColour],
     ];
-  } else if (
-    minIntensity === middleIntensity &&
-    maxIntensity === middleIntensity
-  ) {
+  } else if (minIntensity === middleIntensity && maxIntensity === middleIntensity) {
     // all values are TrueOrFalse
     return [
       [0, unknownColour],
@@ -44,8 +41,7 @@ export function getKleeneanColourscale(
     ];
   } else {
     // values of all three types are present
-    const unknownRatio =
-      (middleIntensity - minIntensity) / (maxIntensity - minIntensity);
+    const unknownRatio = (middleIntensity - minIntensity) / (maxIntensity - minIntensity);
     return [
       [0, falseColour],
       [unknownRatio, unknownColour],
@@ -53,4 +49,3 @@ export function getKleeneanColourscale(
     ];
   }
 }
-

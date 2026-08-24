@@ -1,19 +1,18 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import type { Box } from '@/steps/steps';
+  import { computed } from 'vue';
+  import type { Box } from './boxes';
 
-const props = defineProps<{
-  box: Box;
-}>();
+  const props = defineProps<{
+    box: Box;
+  }>();
 
-const variableRangeStrs = computed(() => {
-  const varDomains = props.box.box_.varDomains ?? [];
-  const parts = Object.entries(varDomains).map(([v, d]) => {
-    return { l: d.l, v, u: d.u };
+  const variableRangeStrs = computed(() => {
+    const varDomains = props.box.box_.varDomains ?? [];
+    const parts = Object.entries(varDomains).map(([v, d]) => {
+      return { l: d.l, v, u: d.u };
+    });
+    return parts;
   });
-  return parts;
-});
-
 </script>
 
 <template>

@@ -1,8 +1,8 @@
-import _ from "lodash";
-import type { Expr, ExprHash } from "./exprs";
-import type { FormHash } from "./forms";
-import type { Kleenean } from "./kleenean";
-import type { Triangulation2D } from "./mesh";
+import _ from 'lodash';
+import type { Expr, ExprHash } from './exprs';
+import type { FormHash } from './forms';
+import type { Kleenean } from './kleenean';
+import type { Triangulation2D } from './mesh';
 
 export type EvalInfo = {
   formValues: FormValues;
@@ -42,16 +42,12 @@ export type AffineForm = {
   errTerms: Record<string, number>;
 };
 
-export function exprValueIsInterval(
-  exprValue: ExprValue,
-): exprValue is Interval<number> {
-  return "l" in exprValue && "u" in exprValue;
+export function exprValueIsInterval(exprValue: ExprValue): exprValue is Interval<number> {
+  return 'l' in exprValue && 'u' in exprValue;
 }
 
-export function exprValueIsAffineForm(
-  exprValue: ExprValue,
-): exprValue is AffineForm {
-  return "center" in exprValue && "errTerms" in exprValue;
+export function exprValueIsAffineForm(exprValue: ExprValue): exprValue is AffineForm {
+  return 'center' in exprValue && 'errTerms' in exprValue;
 }
 
 // export function evalAffineForm(aff: AffineForm, x: number[], y: number[]): { l: number[], u: number[] } {
@@ -78,13 +74,9 @@ export function evalExprOnTriangulation(
     // If expr value is an affine form, also the value for x and y will be affine forms.
     // The affine form for a variable will have a single error term, whose key is the variable's ID.
     const xErrId =
-      xExprValue && exprValueIsAffineForm(xExprValue)
-        ? _.keys(xExprValue.errTerms)[0]
-        : undefined;
+      xExprValue && exprValueIsAffineForm(xExprValue) ? _.keys(xExprValue.errTerms)[0] : undefined;
     const yErrId =
-      yExprValue && exprValueIsAffineForm(yExprValue)
-        ? _.keys(yExprValue.errTerms)[0]
-        : undefined;
+      yExprValue && exprValueIsAffineForm(yExprValue) ? _.keys(yExprValue.errTerms)[0] : undefined;
 
     const xErrCoeff: number = xErrId ? (eValue.errTerms[xErrId] ?? 0) : 0;
     const yErrCoeff: number = yErrId ? (eValue.errTerms[yErrId] ?? 0) : 0;
@@ -108,10 +100,7 @@ export function evalExprOnTriangulation(
     }
 
     const c = triang.x.map(
-      (_, i) =>
-        eValue.center +
-        xErrCoeff * xToUnit(triang.x[i]) +
-        yErrCoeff * yToUnit(triang.y[i]),
+      (_, i) => eValue.center + xErrCoeff * xToUnit(triang.x[i]) + yErrCoeff * yToUnit(triang.y[i]),
     );
     const l = c.map((v) => v - otherErrSum);
     const u = c.map((v) => v + otherErrSum);

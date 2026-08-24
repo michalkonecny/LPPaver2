@@ -17,25 +17,26 @@ where
 import AERN2.MP (Kleenean (..), MPBall)
 import AERN2.MP qualified as MP
 import BranchAndPrune.BranchAndPrune qualified as BP
-import BranchAndPrune.ForkUtils (MonadUnliftIOWithState)
-import Control.Monad.IO.Unlift (MonadIO)
+import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Logger (MonadLogger)
 import Data.Hashable (Hashable (hash))
 import Data.Map qualified as Map
 import GHC.Records
 import LPPaver2.LinearPrune (LinearPruneResult (..), linearPrune)
 import LPPaver2.RealConstraints
+import LPPaver2.RealConstraints.Eval (EvaluatedFormR (..))
 import MixedTypesNumPrelude
 import Text.Printf (printf)
+
 -- import Debug.Trace (trace)
 
 type LPPProblem = BP.Problem Form Box
 
 type LPPPaving = BP.Paving Form Box Boxes
 
-type LPPStep r = BP.Step LPPProblem LPPPaving (EvaluatedForm r)
+type LPPStep = BP.Step LPPProblem LPPPaving EvaluatedForm
 
-getStepBoxes :: LPPStep r -> BoxStore
+getStepBoxes :: LPPStep -> BoxStore
 getStepBoxes step =
   scopesStore `Map.union` pavingBoxStore
   where
@@ -48,7 +49,7 @@ getStepBoxes step =
     pavingsScopes = [p.scope | p <- pavings]
     pavingBoxStore = Map.unions [paving.inner.store `Map.union` paving.outer.store | paving <- pavings]
 
-getStepExprs :: LPPStep r -> ExprStore
+getStepExprs :: LPPStep -> ExprStore
 getStepExprs step =
   constraintsStore `Map.union` undecidedStore
   where
@@ -62,7 +63,7 @@ getStepExprs step =
     problems = BP.getStepProblems step
     pavings = BP.getStepPavings step
 
-getStepForms :: LPPStep r -> FormStore
+getStepForms :: LPPStep -> FormStore
 getStepForms step =
   constraintsStore `Map.union` undecidedStore `Map.union` basicFormStore
   where
@@ -103,7 +104,7 @@ shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
       ]
 
     accuracyBelowThreshold :: MPBall -> Bool
-    accuracyBelowThreshold ball = 
+    accuracyBelowThreshold ball =
       -- trace (printf "Checking if box with radius %s should be given up (threshold: %s)" (show (MP.radius ball)) (show $ double giveUpAccuracy)) $
       diameter <= giveUpAccuracy
       where
@@ -111,25 +112,22 @@ shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
 
 lppBranchAndPrune ::
   ( MonadLogger m,
-    MonadIO m,
-    MonadUnliftIOWithState m,
-    CanEval r,
-    HasKleeneanComparison r,
-    BP.CanControlSteps m (LPPStep r)
+    MonadUnliftIO m
   ) =>
-  r ->
+  EvalArithmetic ->
+  BP.StepsController m LPPStep ->
   LPPBPParams ->
   m LPPBPResult
-lppBranchAndPrune (sampleR :: r) (LPPBPParams {..}) = do
-  -- conn <- liftIO $ Redis.checkedConnect Redis.defaultConnectInfo
+lppBranchAndPrune evalArithmetic lppStepsController (LPPBPParams {..}) = do
   BP.branchAndPruneM
+    lppStepsController
     ( BP.Params
         { BP.problem,
-          BP.pruningMethod = sampleR,
+          BP.pruningMethod = evalArithmetic,
           BP.shouldAbort = const Nothing,
           BP.shouldGiveUpSolvingProblem = shouldGiveUpOnBPLPPProblem giveUpAccuracy :: LPPProblem -> Bool,
           BP.dummyPriorityQueue,
-          BP.dummyEvalInfo = EvaluatedForm {form = formTrue, exprValues = Map.empty, formValues = Map.empty} :: EvaluatedForm r,
+          BP.dummyEvalInfo = EvaluatedFormMPBall EvaluatedFormR {form = formTrue, exprValues = Map.empty, formValues = Map.empty},
           BP.maxThreads,
           BP.shouldLog
         }
@@ -139,14 +137,16 @@ lppBranchAndPrune (sampleR :: r) (LPPBPParams {..}) = do
     dummyPriorityQueue = BoxStack [problem]
 
 instance
-  (CanEval r, HasKleeneanComparison r, Applicative m) =>
-  BP.CanPrune m r Form Box Boxes (EvaluatedForm r)
+  (Applicative m) =>
+  BP.CanPrune m EvalArithmetic Form Box Boxes EvaluatedForm
   where
-  pruneProblemM sampleR (BP.Problem {scope, constraint}) =
+  pruneProblemM evalArithmetic (BP.Problem {scope, constraint}) =
     pure (pavingP, simplificationResult.evaluatedForm)
     where
-      simplificationResult = simplifyEvalForm sampleR scope constraint
-      simplifiedForm = simplificationResult.evaluatedForm.form
+      simplificationResult = simplifyEvalForm evalArithmetic scope constraint
+      simplifiedForm = case simplificationResult.evaluatedForm of
+        EvaluatedFormMPBall (EvaluatedFormR {form}) -> form
+        EvaluatedFormAffine (EvaluatedFormR {form}) -> form
       -- remove unused variables from the split order:
       simplifiedScope = boxRestrictSplitOrder (formVariables simplifiedForm) scope
       simplifiedFormProblem = BP.Problem {scope = simplifiedScope, constraint = simplifiedForm}
@@ -177,7 +177,7 @@ mkLinearPrunePaving scope simplifiedForm LinearPruneResult {maybeRemainingBox, r
         then BP.pavingInner scope (mkBoxes scope) -- true on scope
         else BP.pavingOuter scope (mkBoxes scope) -- false on scope
     Just remainingBox ->
-      -- linear pruning 
+      -- linear pruning
       let remainingProblem = BP.Problem {scope = remainingBox, constraint = simplifiedForm}
           decidedBoxes = mkBoxes $ mkBoxDifference scope remainingBox
        in BP.Paving

@@ -54,7 +54,8 @@ extra-deps:
   subdirs:
   - aern2-affarith
 - git: git@github.com:michalkonecny/branch-and-prune.git
-  commit: 'c496038d44c328ae79fd7acd0b015bd7f9428294'
+  # commit: 'c496038d44c328ae79fd7acd0b015bd7f9428294'
+  commit: 'c77f581633cfc3a59b519af0d73235a5ecd789aa'
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

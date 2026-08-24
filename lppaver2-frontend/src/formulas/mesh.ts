@@ -1,12 +1,15 @@
-import _ from "lodash";
-import type { Interval } from "./evalInfo";
+import _ from 'lodash';
+import type { Interval } from './evalInfo';
 
-export type DomainAndN = { domain: Interval<number>, n: number };
+export type DomainAndN = { domain: Interval<number>; n: number };
 
-export function getDomainSamples(params: DomainAndN): { withEndpoints: number[], midpoints: number[] } {
+export function getDomainSamples(params: DomainAndN): {
+  withEndpoints: number[];
+  midpoints: number[];
+} {
   const { domain, n } = params;
   if (n <= 1) {
-    throw new Error("n must be at least 2 to get samples with endpoints and midpoints.");
+    throw new Error('n must be at least 2 to get samples with endpoints and midpoints.');
   }
   const withEndpoints = _.range(domain.l, domain.u + 1e-10, (domain.u - domain.l) / (n - 1));
   const midpoints = withEndpoints.slice(0, -1).map((v, i) => (v + withEndpoints[i + 1]!) / 2);
@@ -21,7 +24,10 @@ export type Triangulation2D = {
   k: Plotly.TypedArray;
 };
 
-export function getCornersOnlyTriangulation(xDomain: Interval<number>, yDomain: Interval<number>): Triangulation2D {
+export function getCornersOnlyTriangulation(
+  xDomain: Interval<number>,
+  yDomain: Interval<number>,
+): Triangulation2D {
   return {
     x: [xDomain.l, xDomain.u, xDomain.l, xDomain.u],
     y: [yDomain.l, yDomain.l, yDomain.u, yDomain.u],
@@ -32,7 +38,10 @@ export function getCornersOnlyTriangulation(xDomain: Interval<number>, yDomain: 
   };
 }
 
-export function getHexTriangulation(xDomainAndN: DomainAndN, yDomainAndN: DomainAndN): Triangulation2D {
+export function getHexTriangulation(
+  xDomainAndN: DomainAndN,
+  yDomainAndN: DomainAndN,
+): Triangulation2D {
   const xSamples = getDomainSamples(xDomainAndN);
   const ySamples = getDomainSamples(yDomainAndN);
 
@@ -71,60 +80,64 @@ export function getHexTriangulation(xDomainAndN: DomainAndN, yDomainAndN: Domain
                              |/   \ / x \ /   \|
             Prev Full Row :  0----(1)----2-----3
         */
-        const currentPtIdx = x.length - 1;     // ((5)) in diagram
+        const currentPtIdx = x.length - 1; // ((5)) in diagram
         const prevRowPt1Idx = currentPtIdx - xFullRowLength; // (1) in diagram
-        const nextRowPt1Idx = currentPtIdx + xMidRowLength;  // (8) in diagram
+        const nextRowPt1Idx = currentPtIdx + xMidRowLength; // (8) in diagram
         const haveNextRow = yIdx < ySamples.withEndpoints.length - 1;
 
-        // left edge triangle (if on the edge) 
+        // left edge triangle (if on the edge)
         if (xIdx == 0 && haveNextRow) {
           // first midpoint in row: create triangle to the left towards next row
-          i.push(prevRowPt1Idx);      // 0 in diagram
-          j.push(currentPtIdx);       // 4 in diagram
-          k.push(nextRowPt1Idx);      // 7 in diagram
+          i.push(prevRowPt1Idx); // 0 in diagram
+          j.push(currentPtIdx); // 4 in diagram
+          k.push(nextRowPt1Idx); // 7 in diagram
         }
 
         // triangles with one vertex at current midpoint row
         // triangle to prev row
-        i.push(prevRowPt1Idx);      // (1) in diagram
-        j.push(currentPtIdx);       // ((5)) in diagram
-        k.push(prevRowPt1Idx + 1);  // 2 in diagram
+        i.push(prevRowPt1Idx); // (1) in diagram
+        j.push(currentPtIdx); // ((5)) in diagram
+        k.push(prevRowPt1Idx + 1); // 2 in diagram
         // triangle to next row (if present)
         if (haveNextRow) {
-          i.push(nextRowPt1Idx);      // (8) in diagram
-          j.push(currentPtIdx);       // ((5)) in diagram
-          k.push(nextRowPt1Idx + 1);  // 9 in diagram
+          i.push(nextRowPt1Idx); // (8) in diagram
+          j.push(currentPtIdx); // ((5)) in diagram
+          k.push(nextRowPt1Idx + 1); // 9 in diagram
         }
 
         // if not the last midpoint in the row, create triangles with two vertices at current midpoint row
         if (xIdx < xSamples.midpoints.length - 1) {
           // triangle to the right towards the previous row
-          i.push(currentPtIdx);       // ((5)) in diagram
-          j.push(currentPtIdx + 1);   // 6 in diagram
-          k.push(prevRowPt1Idx + 1);  // 2 in diagram
+          i.push(currentPtIdx); // ((5)) in diagram
+          j.push(currentPtIdx + 1); // 6 in diagram
+          k.push(prevRowPt1Idx + 1); // 2 in diagram
           // triangle to the right towards the next row (if present)
           if (haveNextRow) {
-            i.push(currentPtIdx);       // ((5)) in diagram
-            j.push(currentPtIdx + 1);   // 6 in diagram
-            k.push(nextRowPt1Idx + 1);  // 9 in diagram
+            i.push(currentPtIdx); // ((5)) in diagram
+            j.push(currentPtIdx + 1); // 6 in diagram
+            k.push(nextRowPt1Idx + 1); // 9 in diagram
           }
         }
 
-        // right edge triangle (if on the edge) 
+        // right edge triangle (if on the edge)
         if (xIdx == xSamples.midpoints.length - 1 && haveNextRow) {
           // first midpoint in row: create triangle to the left towards next row
-          i.push(prevRowPt1Idx + 1);  // 3 in diagram
-          j.push(currentPtIdx);       // 6 in diagram
-          k.push(nextRowPt1Idx + 1);  // 10 in diagram
+          i.push(prevRowPt1Idx + 1); // 3 in diagram
+          j.push(currentPtIdx); // 6 in diagram
+          k.push(nextRowPt1Idx + 1); // 10 in diagram
         }
       });
     }
   });
 
-  return { x, y, i: new Int32Array(i), j: new Int32Array(j), k: new Int32Array(k) };
+  return {
+    x,
+    y,
+    i: new Int32Array(i),
+    j: new Int32Array(j),
+    k: new Int32Array(k),
+  };
 }
-
-
 
 // function allCombinations(varValues: Record<Var, number[]>): Record<Var, number>[] {
 //   // process the variables one by one, building up combinations

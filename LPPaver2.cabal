@@ -26,11 +26,13 @@ source-repository head
 library
   exposed-modules:
       LPPaver2.BranchAndPrune
+      LPPaver2.ExampleProblems
       LPPaver2.Export
       LPPaver2.LinearPrune
       LPPaver2.RealConstraints
       LPPaver2.RealConstraints.Boxes
       LPPaver2.RealConstraints.Eval
+      LPPaver2.RealConstraints.EvalArith
       LPPaver2.RealConstraints.EvalArithmetic.AffArith
       LPPaver2.RealConstraints.EvalArithmetic.MPBall
       LPPaver2.RealConstraints.Expr
@@ -58,7 +60,6 @@ library
     , bytestring
     , containers
     , hashable
-    , hedis
     , hspec
     , mixed-types-num
     , monad-logger
@@ -69,14 +70,15 @@ library
     , unliftio-core
   default-language: Haskell2010
 
-executable lppaver2-example
-  main-is: runExample.hs
+executable lppaver2-server
+  main-is: runServer.hs
   other-modules:
+      ServerState
       Paths_LPPaver2
   autogen-modules:
       Paths_LPPaver2
   hs-source-dirs:
-      cli-app
+      server
   default-extensions:
       GHC2021
       RebindableSyntax
@@ -95,7 +97,6 @@ executable lppaver2-example
     , bytestring
     , containers
     , hashable
-    , hedis
     , hspec
     , mixed-types-num
     , monad-logger
@@ -104,6 +105,7 @@ executable lppaver2-example
     , time
     , transformers
     , unliftio-core
+    , websockets
   default-language: Haskell2010
 
 test-suite LPPaver2-test
@@ -135,7 +137,6 @@ test-suite LPPaver2-test
     , bytestring
     , containers
     , hashable
-    , hedis
     , hspec
     , mixed-types-num
     , monad-logger

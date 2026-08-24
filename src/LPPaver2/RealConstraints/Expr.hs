@@ -12,6 +12,8 @@ module LPPaver2.RealConstraints.Expr
     ExprStore,
     exprVar,
     exprLit,
+    expr1,
+    expr2,
   )
 where
 

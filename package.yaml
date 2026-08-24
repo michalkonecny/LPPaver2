@@ -31,7 +31,6 @@ dependencies:
 - time
 - unliftio-core
 - aeson
-- hedis
 - mixed-types-num
 - aern2-mp
 - aern2-affarith
@@ -62,15 +61,26 @@ library:
   source-dirs: src
 
 executables:
-  lppaver2-example:
-    main:                runExample.hs
-    source-dirs:         cli-app
+  # lppaver2-example:
+  #   main:                runExample.hs
+  #   source-dirs:         cli-app
+  #   ghc-options:
+  #   - -threaded
+  #   - -rtsopts
+  #   - -with-rtsopts=-N
+  #   dependencies:
+  #   - LPPaver2
+
+  lppaver2-server:
+    main:                runServer.hs
+    source-dirs:         server
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - LPPaver2
+    - websockets
 
 tests:
   LPPaver2-test:

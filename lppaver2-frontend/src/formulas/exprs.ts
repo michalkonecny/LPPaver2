@@ -1,59 +1,59 @@
-export type Var = string
+import type { Var } from '@/boxes/boxes';
 
-export type ExprF<E> = ExprVar | ExprLit | ExprUnary<E> | ExprBinary<E>
+export type ExprF<E> = ExprVar | ExprLit | ExprUnary<E> | ExprBinary<E>;
 
 export type ExprVar = {
-  tag: 'ExprVar',
-  var: Var
-}
+  tag: 'ExprVar';
+  var: Var;
+};
 
 export type RationalLit = {
-  numerator: number,
-  denominator: number
-}
+  numerator: number;
+  denominator: number;
+};
 
 export type ExprLit = {
-  tag: 'ExprLit',
-  lit: RationalLit
-}
+  tag: 'ExprLit';
+  lit: RationalLit;
+};
 
 export type ExprUnary<E> = {
-  tag: 'ExprUnary',
-  unop: UnaryOp,
-  e1: E
-}
+  tag: 'ExprUnary';
+  unop: UnaryOp;
+  e1: E;
+};
 
 export type ExprBinary<E> = {
-  tag: 'ExprBinary',
-  binop: BinaryOp,
-  e1: E,
-  e2: E
-}
+  tag: 'ExprBinary';
+  binop: BinaryOp;
+  e1: E;
+  e2: E;
+};
 
-export type UnaryOp = 'OpNeg' | 'OpSqrt' | 'OpSin' | 'OpCos'
-export type BinaryOp = 'OpPlus' | 'OpMinus' | 'OpTimes' | 'OpDivide'
+export type UnaryOp = 'OpNeg' | 'OpSqrt' | 'OpSin' | 'OpCos';
+export type BinaryOp = 'OpPlus' | 'OpMinus' | 'OpTimes' | 'OpDivide';
 
 export const unaryOpSymbolMap: Record<UnaryOp, string> = {
-  'OpNeg': '-',
-  'OpSqrt': '√',
-  'OpSin': 'sin',
-  'OpCos': 'cos'
-}
+  OpNeg: '-',
+  OpSqrt: '√',
+  OpSin: 'sin',
+  OpCos: 'cos',
+};
 
 export const binaryOpSymbolMap: Record<BinaryOp, string> = {
-  'OpPlus': '+',
-  'OpMinus': '-',
-  'OpTimes': '*',
-  'OpDivide': '/'
-}
+  OpPlus: '+',
+  OpMinus: '-',
+  OpTimes: '*',
+  OpDivide: '/',
+};
 
-export type ExprHash = string
-export type ExprDict = Record<ExprHash, ExprF<ExprHash>>
+export type ExprHash = string;
+export type ExprDict = Record<ExprHash, ExprF<ExprHash>>;
 
 export type Expr = {
-  e: ExprF<Expr>,
-  hash: ExprHash
-}
+  e: ExprF<Expr>;
+  hash: ExprHash;
+};
 
 export function exprHashToExpr(exprHash: ExprHash, dict: ExprDict): Expr {
   const exprF = dict[exprHash];
@@ -71,9 +71,9 @@ export function exprHashToExpr(exprHash: ExprHash, dict: ExprDict): Expr {
         e: {
           tag: 'ExprUnary',
           unop: exprF.unop,
-          e1: exprHashToExpr(exprF.e1, dict)
+          e1: exprHashToExpr(exprF.e1, dict),
         },
-        hash: exprHash
+        hash: exprHash,
       };
     case 'ExprBinary':
       return {
@@ -81,9 +81,9 @@ export function exprHashToExpr(exprHash: ExprHash, dict: ExprDict): Expr {
           tag: 'ExprBinary',
           binop: exprF.binop,
           e1: exprHashToExpr(exprF.e1, dict),
-          e2: exprHashToExpr(exprF.e2, dict)
+          e2: exprHashToExpr(exprF.e2, dict),
         },
-        hash: exprHash
+        hash: exprHash,
       };
     default:
       throw new Error(`Unknown expression tag: ${(exprF as any).tag}`);

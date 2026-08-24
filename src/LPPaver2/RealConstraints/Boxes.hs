@@ -8,6 +8,7 @@ module LPPaver2.RealConstraints.Boxes
     boxWithHash,
     mkBox,
     mkBoxDifference,
+    addParamValuesToBox,
     boxAreaD,
     splitBox,
     BoxHash (..),
@@ -46,6 +47,7 @@ type VarDomains = Map.Map Var MPBall
 data Box_
   = Box_
   { varDomains :: VarDomains,
+    volumeVars :: Set.Set Var,
     splitOrder :: [Var],
     -- | This is used to represent the result of pruning a box,
     -- resulting in another box + the difference between the original and the pruned box.
@@ -95,6 +97,7 @@ mkBox varDomainsRational =
     box_ =
       Box_
         { varDomains = Map.fromList (map toBall varDomainsRational),
+          volumeVars = Set.fromList (map fst varDomainsRational),
           splitOrder = map fst varDomainsRational,
           except = Nothing
         }
@@ -108,17 +111,30 @@ mkBoxDifference (Box {box_ = box1}) (Box {box_ = box2}) =
   boxWithHash
     $ Box_
       { varDomains = box1.varDomains,
+        volumeVars = box1.volumeVars,
         splitOrder = box1.splitOrder,
         except = Just box2.varDomains
       }
+
+addParamValuesToBox :: Map.Map Var Rational -> Box -> Box
+addParamValuesToBox paramVarValues box =
+  boxWithHash
+    $ box.box_ {varDomains = box.box_.varDomains `Map.union` paramVarDomains}
+    -- Not adding these parameter variables to volumeVars or splitOrder
+    -- since they do not contribute to the volume of the box and cannot be split.
+  where
+    paramVarDomains = Map.map rational2ball paramVarValues
+    rational2ball :: Rational -> MPBall
+    rational2ball = MP.mpBallP (MP.prec 100)
 
 boxAreaD :: Box -> Double
 boxAreaD box =
   product
     ( map
-        (double . dyadic . MP.radius)
-        (Map.elems box.box_.varDomains)
+        (double . dyadic . MP.radius . \var -> box.box_.varDomains Map.! var)
+        (Set.toList box.box_.volumeVars)
     )
+
 
 {- Collections of boxes. -}
 
@@ -173,8 +189,8 @@ splitBox box = case box.box_.splitOrder of
             case Map.lookup splitVar varDomains of
               Nothing -> error "Internal error: The split variable does not exist."
               Just splitVarDomain ->
-                [ boxWithHash $ Box_ {varDomains = varDomainsL, splitOrder, except = Nothing},
-                  boxWithHash $ Box_ {varDomains = varDomainsU, splitOrder, except = Nothing}
+                [ boxWithHash $ box.box_ {varDomains = varDomainsL, splitOrder},
+                  boxWithHash $ box.box_ {varDomains = varDomainsU, splitOrder}
                 ]
                 where
                   (splitVarDomainL, splitVarDomainU) = splitMPBall splitVarDomain
