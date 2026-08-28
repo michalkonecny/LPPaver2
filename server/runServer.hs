@@ -114,40 +114,6 @@ instance A.FromJSON GetAllFormulaNodesRequest where
 instance A.ToJSON FormulaNodesResponse where
   toEncoding = A.genericToEncoding aesonOptions
 
---------------------------------
---- Steps ---
---------------------------------
-
-newtype GetStepsRequest = GetStepsRequest {runId :: RunID}
-  deriving (Generic, Show)
-
-data StepsResponse = StepsResponse
-  { runId :: RunID,
-    steps :: [LPPStep],
-    boxes :: BoxStore
-  }
-  deriving (Generic)
-
-instance IsRequestResponse GetStepsRequest where
-  type ResponseType GetStepsRequest = StepsResponse
-  handleRequest state request respond = do
-    let runId = request.runId
-    case Map.lookup runId state.runs of
-      Nothing -> do
-        putStrLn $ "No run found for runId: " ++ show runId
-        respond $ StepsResponse {runId = runId, steps = [], boxes = state.boxes}
-        pure state
-      Just runInfo -> do
-        putStrLn $ "Returning steps for runId: " ++ show runId
-        respond $ StepsResponse {runId = runId, steps = runInfo.runSteps, boxes = state.boxes}
-        pure state
-
-instance A.FromJSON GetStepsRequest where
-  parseJSON = A.genericParseJSON aesonOptions
-
-instance A.ToJSON StepsResponse where
-  toEncoding = A.genericToEncoding aesonOptions
-
 ------------------------------------------------
 --- Running the solver and returning results ---
 ------------------------------------------------
@@ -185,21 +151,31 @@ data SolverRunStatus = SolverRunning | SolverFinished
 
 data SolverRunStatusUpdate = SolverRunStatusUpdate
   { runId :: RunID,
-    status :: SolverRunStatus
+    status :: SolverRunStatus,
+    newSteps :: [LPPStep],
+    newBoxes :: BoxStore
   }
-  deriving (Show, Generic)
+  deriving (Generic)
 
 instance IsRequestResponse RunSolverRequest where
   type ResponseType RunSolverRequest = SolverRunStatusUpdate
   handleRequest state request respond = do
     let runId = request.runId
-    respond (SolverRunStatusUpdate {runId, status = SolverRunning})
+    respond (SolverRunStatusUpdate {runId, status = SolverRunning, newSteps = [], newBoxes = Map.empty})
     let params = mkParams request
-    stateMV <- liftIO $ newMVar state
+    stateMV <- liftIO $ newMVar state -- all updates are done via modifyMVar to ensure atomicity
+    -- run the solver and add steps and boxes into stateMV as they are generated
     _ <- runStdoutLoggingT $ do
       lppBranchAndPrune (getEvalArithmetic request.arithmetic) (lppStepsController runId stateMV) params
-    respond (SolverRunStatusUpdate {runId, status = SolverFinished})
+    -- after the solver finishes, extract the new steps and boxes ...
+    (newSteps, newBoxes) <- modifyMVar stateMV $ \state2 -> do
+      pure $ ServerState.processNewSteps runId state2
+    -- ... and send them to the client as part of the final status update
+    respond (SolverRunStatusUpdate {runId, status = SolverFinished, newSteps, newBoxes})
     liftIO $ takeMVar stateMV
+
+-- TODO: send the steps at around 2 Hz in chunks as they are generated,
+-- instead of waiting for the solver to finish
 
 lppStepsController :: (MonadIO m) => RunID -> MVar ServerState -> BP.StepsController m LPPStep
 lppStepsController runId stateMV =
@@ -208,22 +184,35 @@ lppStepsController runId stateMV =
     reportStep step = liftIO $ do
       modifyMVar_ stateMV (pure . addStepToState step)
       putStrLn $ "Step for runId " ++ show runId ++ ": " ++ show step
-    -- This is the only place where stateMV is modified.
-    -- Thus all updates follow the take-put protocol, making the modifications atomic.
 
     addStepToState :: LPPStep -> ServerState -> ServerState
     addStepToState step state =
       state
         { -- Update the server state with the new boxes, expressions, and forms from the step
-          boxes = Map.union state.boxes (getStepBoxes step),
+          boxes = Map.union state.boxes stepBoxes,
           exprs = Map.union state.exprs (getStepExprs step),
           forms = Map.union state.forms (getStepForms step),
           runs = Map.alter updateRunInfo runId state.runs
         }
       where
+        stepBoxes = getStepBoxes step
         updateRunInfo :: Maybe RunInfo -> Maybe RunInfo
-        updateRunInfo Nothing = Just $ RunInfo {runID = runId, runSteps = [step]}
-        updateRunInfo (Just runInfo) = Just $ runInfo {runSteps = runInfo.runSteps ++ [step]}
+        updateRunInfo Nothing =
+          Just $
+            RunInfo
+              { runID = runId,
+                steps = [],
+                newSteps = [step],
+                newBoxes = stepBoxes
+              }
+        updateRunInfo (Just runInfo) =
+          Just $
+            RunInfo
+              { runID = runInfo.runID,
+                steps = runInfo.steps,
+                newSteps = runInfo.newSteps ++ [step],
+                newBoxes = Map.union runInfo.newBoxes stepBoxes
+              }
 
 mkParams :: RunSolverRequest -> LPPBPParams
 mkParams request =
@@ -269,14 +258,12 @@ data Request
   = RequestGetExampleProblems GetExampleProblemsRequest
   | RequestGetAllFormulaNodes GetAllFormulaNodesRequest
   | RequestRunSolver RunSolverRequest
-  | RequestGetSteps GetStepsRequest
   deriving (Generic, Show)
 
 data Response
   = ResponseExampleProblems ExampleProblemsResponse
   | ResponseFormulaNodes FormulaNodesResponse
   | ResponseSolverRunStatusUpdate SolverRunStatusUpdate
-  | ResponseSteps StepsResponse
   deriving (Generic)
 
 instance IsRequestResponse Request where
@@ -287,8 +274,6 @@ instance IsRequestResponse Request where
     handleRequest state req (respond . ResponseFormulaNodes)
   handleRequest state (RequestRunSolver req) respond = do
     handleRequest state req (respond . ResponseSolverRunStatusUpdate)
-  handleRequest state (RequestGetSteps req) respond = do
-    handleRequest state req (respond . ResponseSteps)
 
 instance A.FromJSON Request where
   parseJSON = A.genericParseJSON aesonOptions

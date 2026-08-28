@@ -135,37 +135,27 @@ export const useProverStore = defineStore('prover', () => {
           break;
         }
         case 'ResponseSolverRunStatusUpdate': {
-          const { runId, status } = message.contents;
+          const { runId, status, newSteps, newBoxes } = message.contents;
           if (runs.value[runId]) {
             runs.value[runId].status = status;
+            // absorb new steps and boxes
+            if (!_.isEmpty(newSteps)) {
+              runs.value[runId].steps = [...runs.value[runId].steps, ...newSteps];
+            }
+            if (!_.isEmpty(newBoxes)) {
+              boxes.value = { ...boxes.value, ...newBoxes };
+            }
+
+            // TODO: replace by ongoing incremental updates of formula nodes
             if (status === 'SolverFinished') {
-              const message: ProverRequest = {
-                tag: 'RequestGetSteps',
-                contents: {
-                  runId,
-                },
-              };
-              // request the steps
-              sendProverRequest(ws, message);
+              // update all formula nodes in case there are new ones arising due to formula simplifications in the steps
+              sendProverRequest(ws, {
+                tag: 'RequestGetAllFormulaNodes',
+                contents: [],
+              });
             }
           } else {
             console.warn(`Received run status for unknown runId ${runId}`);
-          }
-          break;
-        }
-        case 'ResponseSteps': {
-          const { runId, steps, boxes: newBoxes } = message.contents;
-          boxes.value = { ...boxes.value, ...newBoxes };
-          if (runs.value[runId]) {
-            // store the steps for this run
-            runs.value[runId].steps = steps;
-            // update all formula nodes in case there are new ones arising due to formula simplifications in the steps
-            sendProverRequest(ws, {
-              tag: 'RequestGetAllFormulaNodes',
-              contents: [],
-            });
-          } else {
-            console.warn(`Received steps for unknown runId ${runId}`);
           }
           break;
         }

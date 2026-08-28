@@ -5,6 +5,7 @@ module ServerState
     new,
     addBoxes,
     addForms,
+    processNewSteps
   )
 where
 
@@ -35,7 +36,9 @@ instance A.ToJSON RunID where
 
 data RunInfo = RunInfo
   { runID :: RunID,
-    runSteps :: [LPPStep]
+    steps :: [LPPStep],
+    newSteps :: [LPPStep],
+    newBoxes :: BoxStore
   }
 
 new :: ServerState
@@ -62,3 +65,14 @@ addForms newForms state =
   where
     newExprNodes = List.map (\f -> f.nodesE) newForms
     newFormNodes = List.map (\f -> f.nodesF) newForms
+
+processNewSteps :: RunID -> ServerState -> (ServerState, ([LPPStep], BoxStore))
+processNewSteps runId state =
+  case Map.lookup runId state.runs of
+    Nothing -> (state, ([], Map.empty))
+    Just runInfo ->
+      -- shift the newSteps to steps and clear newSteps
+      let steps = runInfo.steps ++ runInfo.newSteps
+          updatedRunInfo = RunInfo {runID = runInfo.runID, steps = steps, newSteps = [], newBoxes = Map.empty}
+          updatedState = state {runs = Map.insert runId updatedRunInfo state.runs}
+       in (updatedState, (runInfo.newSteps, runInfo.newBoxes)) -- also return the shifted newSteps and newBoxes
