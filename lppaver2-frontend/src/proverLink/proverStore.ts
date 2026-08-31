@@ -77,7 +77,7 @@ export const useProverStore = defineStore('prover', () => {
     paramValues: Record<string, number>,
     arithmetic: Arithmetic,
     giveUpAccuracy: number,
-    numberOfThreads: number = 4,
+    numberOfThreads: number = 1,
   ) {
     const ws = await getProverWS();
     const runId = generateRunId();
@@ -151,7 +151,6 @@ export const useProverStore = defineStore('prover', () => {
               boxes.value = { ...boxes.value, ...newBoxes };
             }
 
-            // TODO: replace by ongoing incremental updates of formula nodes
             if (status === 'SolverFinished') {
               // update all formula nodes in case there are new ones arising due to formula simplifications in the steps
               sendProverRequest(ws, {

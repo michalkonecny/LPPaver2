@@ -10,23 +10,24 @@ import AERN2.MP.Affine (MPAffine (..), MPAffineConfig (..))
 import BranchAndPrune.BranchAndPrune (Problem (..))
 import BranchAndPrune.BranchAndPrune qualified as BP
 import Control.Concurrent (MVar, modifyMVar, modifyMVar_, newMVar, takeMVar)
-import Control.Monad (forever)
+import Control.Monad (forever, when)
 import Control.Monad.IO.Unlift (MonadIO (liftIO))
 import Control.Monad.Logger (runStdoutLoggingT)
 import Data.Aeson qualified as A
 import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text.Encoding qualified as T
+import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import GHC.Generics (Generic)
 import GHC.Records
-import LPPaver2.BranchAndPrune (LPPBPParams (..), LPPStep, getStepBoxes, getStepExprs, getStepForms, lppBranchAndPrune)
+import LPPaver2.BranchAndPrune (LPPBPParams (..), LPPStep, getStepBoxes, lppBranchAndPrune)
 import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), exampleProblems, exampleProblemsList, substituteParams)
 import LPPaver2.Export ()
 import LPPaver2.RealConstraints (EvalArithmetic (..), ExprStore, FormStore)
 import LPPaver2.RealConstraints.Boxes (BoxStore)
 import MixedTypesNumPrelude (convert, convertExactly)
 import Network.WebSockets qualified as WS
-import ServerState (RunID (..), RunInfo (..), ServerState (..))
+import ServerState (RunID (..), ServerState (..))
 import ServerState qualified
 import Prelude
 
@@ -160,59 +161,65 @@ data SolverRunStatusUpdate = SolverRunStatusUpdate
 instance IsRequestResponse RunSolverRequest where
   type ResponseType RunSolverRequest = SolverRunStatusUpdate
   handleRequest state request respond = do
-    let runId = request.runId
-    respond (SolverRunStatusUpdate {runId, status = SolverRunning, newSteps = [], newBoxes = Map.empty})
-    let params = mkParams request
     stateMV <- liftIO $ newMVar state -- all updates are done via modifyMVar to ensure atomicity
-    -- run the solver and add steps and boxes into stateMV as they are generated
+
+    -- report solver has started
+    respond $ SolverRunStatusUpdate {runId, status = SolverRunning, newSteps = [], newBoxes = Map.empty}    
+    setLastSentTime runId stateMV -- mark the time of this initial update
+
+    -- run the solver with our steps controller
     _ <- runStdoutLoggingT $ do
-      lppBranchAndPrune (getEvalArithmetic request.arithmetic) (lppStepsController runId stateMV) params
-    -- after the solver finishes, extract the new steps and boxes ...
-    (newSteps, newBoxes) <- modifyMVar stateMV $ \state2 -> do
-      pure $ ServerState.processNewSteps runId state2
-    -- ... and send them to the client as part of the final status update
-    respond (SolverRunStatusUpdate {runId, status = SolverFinished, newSteps, newBoxes})
+      lppBranchAndPrune
+        (getEvalArithmetic request.arithmetic)
+        (lppStepsController runId stateMV (reportProgress stateMV)) -- accummulates steps and boxes and reports them to the client
+        (mkParams request)
+    -- report any remaining new steps after the solver has finished
+    reportProgress stateMV
+    -- report solver has finished
+    respond $ SolverRunStatusUpdate {runId, status = SolverFinished, newSteps = [], newBoxes = Map.empty}
     liftIO $ takeMVar stateMV
+    where
+      runId = request.runId
+      -- a helper to report new steps
+      reportProgress stateMV =
+        do
+          (newSteps, newBoxes) <- modifyMVar stateMV $ \state2 -> do
+            putStrLn $ "Reporting progress for runId " ++ show runId
+            pure $ ServerState.processNewSteps runId state2
+          respond $ SolverRunStatusUpdate {runId, status = SolverRunning, newSteps, newBoxes}
+          setLastSentTime runId stateMV
 
--- TODO: send the steps at around 2 Hz in chunks as they are generated,
--- instead of waiting for the solver to finish
+setLastSentTime :: RunID -> MVar ServerState -> IO ()
+setLastSentTime runId state =
+  modifyMVar_ state $ \state2 -> do
+    currentTime <- getCurrentTime
+    putStrLn $ "Setting last sent time for runId " ++ show runId
+    let newState = ServerState.setLastSentTime runId currentTime state2
+    -- putStrLn $ "New last sent time: " ++ show (newState.runs Map.! runId).lastSentTime
+    pure newState
 
-lppStepsController :: (MonadIO m) => RunID -> MVar ServerState -> BP.StepsController m LPPStep
-lppStepsController runId stateMV =
+lppStepsController :: (MonadIO m) => RunID -> MVar ServerState -> IO () -> BP.StepsController m LPPStep
+lppStepsController runId stateMV reportProgress =
   BP.StepsController {reportStep}
   where
     reportStep step = liftIO $ do
-      modifyMVar_ stateMV (pure . addStepToState step)
-      putStrLn $ "Step for runId " ++ show runId ++ ": " ++ show step
-
-    addStepToState :: LPPStep -> ServerState -> ServerState
-    addStepToState step state =
-      state
-        { -- Update the server state with the new boxes, expressions, and forms from the step
-          boxes = Map.union state.boxes stepBoxes,
-          exprs = Map.union state.exprs (getStepExprs step),
-          forms = Map.union state.forms (getStepForms step),
-          runs = Map.alter updateRunInfo runId state.runs
-        }
-      where
-        stepBoxes = getStepBoxes step
-        updateRunInfo :: Maybe RunInfo -> Maybe RunInfo
-        updateRunInfo Nothing =
-          Just $
-            RunInfo
-              { runID = runId,
-                steps = [],
-                newSteps = [step],
-                newBoxes = stepBoxes
-              }
-        updateRunInfo (Just runInfo) =
-          Just $
-            RunInfo
-              { runID = runInfo.runID,
-                steps = runInfo.steps,
-                newSteps = runInfo.newSteps ++ [step],
-                newBoxes = Map.union runInfo.newBoxes stepBoxes
-              }
+      currentTime <- getCurrentTime
+      maybeLastSentTime <- modifyMVar stateMV $ \state -> do
+        -- add the new step to the state
+        -- putStrLn $ "last sent time before adding step: " ++ show (fmap (.lastSentTime) (Map.lookup runId state.runs))
+        let updatedState = ServerState.addNewSteps runId [step] (getStepBoxes step) state
+        let lastSentTime = (updatedState.runs Map.! runId).lastSentTime
+        -- putStrLn $ "last sent time after adding step: " ++ show lastSentTime
+        pure (updatedState, lastSentTime)
+      -- report progress to the client but no more than once every 0.5 seconds
+      case maybeLastSentTime of
+        Nothing -> do
+          putStrLn $ "No last sent time for runId " ++ show runId ++ ", reporting progress."
+          return ()
+        Just lastSentTime -> do
+          putStrLn $ "Since last report: " ++ show (diffUTCTime currentTime lastSentTime) ++ " seconds"
+          when (diffUTCTime currentTime lastSentTime > 0.5) reportProgress
+      -- putStrLn $ "Step for runId " ++ show runId ++ ": " ++ show step
 
 mkParams :: RunSolverRequest -> LPPBPParams
 mkParams request =
