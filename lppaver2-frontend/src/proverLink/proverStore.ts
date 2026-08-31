@@ -39,10 +39,11 @@ export const useProverStore = defineStore('prover', () => {
     exprs,
     forms,
     runs,
-    currentRunId: currentRunId,
+    currentRunId,
     getBox,
     getExpr,
     getForm,
+    resetRunId,
     startRun,
     getRunInfo,
     exampleProblems,
@@ -65,6 +66,10 @@ export const useProverStore = defineStore('prover', () => {
       throw new Error(`Box with hash ${boxHash} not found`);
     }
     return box;
+  }
+
+  function resetRunId() {
+    currentRunId.value = null;
   }
 
   async function startRun(

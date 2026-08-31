@@ -56,7 +56,7 @@
       return [];
     }
 
-    const step: Step = stepsStore.stepFromProblem(problem);
+    const step: Step | null = stepsStore.stepFromProblem(problem);
 
     // recursively get subproblem shapes
     const subProblems = getSubProblems(step);
@@ -64,9 +64,9 @@
 
     // is this a progress step with inner / outer regions?
     const innerRegionH =
-      step.tag === 'ProgressStep' ? step.progressPaving.inner.boxes[0] : undefined;
+      step?.tag === 'ProgressStep' ? step.progressPaving.inner.boxes[0] : undefined;
     const outerRegionH =
-      step.tag === 'ProgressStep' ? step.progressPaving.outer.boxes[0] : undefined;
+      step?.tag === 'ProgressStep' ? step.progressPaving.outer.boxes[0] : undefined;
 
     // get the main step box (possibly with an excluded region)
     // and the Kleenean truth value for that box
