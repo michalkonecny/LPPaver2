@@ -24,7 +24,7 @@
 
   const stepsStore = useStepsStore();
   const proverStore = useProverStore();
-  const { focusedProblem } = storeToRefs(stepsStore);
+  const { focusedProblem, steps } = storeToRefs(stepsStore);
 
   const plotDiv = ref<Plotly.PlotlyHTMLElement | null>(null);
 
@@ -207,7 +207,7 @@
     }
   }
 
-  watch([plotDiv, () => props.topProblem, xVar, yVar, focusedProblem], renderPlot);
+  watch([plotDiv, steps, () => props.topProblem, xVar, yVar, focusedProblem], renderPlot);
 
   onMounted(renderPlot);
   onUnmounted(() => {
