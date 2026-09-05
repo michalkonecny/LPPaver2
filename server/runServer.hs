@@ -34,14 +34,14 @@ import Prelude
 main :: IO ()
 main = do
   putStrLn "Starting LPPaver2 server."
-  state <- newMVar ServerState.new
-  WS.runServer "127.0.0.1" 9160 $ application state
+  WS.runServer "127.0.0.1" 9160 application
 
-application :: MVar ServerState -> WS.ServerApp
-application stateMVar pending = do
+application :: WS.ServerApp
+application pending = do
   conn <- WS.acceptRequest pending
   putStrLn "Client connected."
   -- withPingThread conn 30 (return ()) (forever (requestResponse conn))
+  stateMVar <- newMVar ServerState.new
   forever $ requestResponse stateMVar conn
 
 requestResponse :: MVar ServerState -> WS.Connection -> IO ()
