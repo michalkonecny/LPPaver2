@@ -17,6 +17,7 @@ import Data.Map qualified as Map
 import Data.Time.Clock (UTCTime)
 import GHC.Generics (Generic)
 import GHC.Records
+import BranchAndPrune.BranchAndPrune qualified as BP
 import LPPaver2.BranchAndPrune (LPPStep)
 import LPPaver2.RealConstraints (Box (..), BoxStore, ExprStore, Form (..), FormStore)
 import Prelude
@@ -72,8 +73,11 @@ addForms newForms state =
 
 addNewSteps :: RunID -> [LPPStep] -> BoxStore -> ServerState -> ServerState
 addNewSteps runId newSteps newBoxes state =
+  addForms newForms $
+  addBoxes (Map.elems newBoxes) $
   state {runs = Map.insert runId updatedRunInfo state.runs}
   where
+    newForms = List.map (.constraint) $ List.concatMap BP.getStepProblems newSteps
     updatedRunInfo =
       case Map.lookup runId state.runs of
         Nothing ->
