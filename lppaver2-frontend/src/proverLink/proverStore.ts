@@ -53,7 +53,7 @@ export const useProverStore = defineStore('prover', () => {
     return exprHashToExpr(exprHash, exprs.value);
   }
 
-  function getForm(formHash: FormHash): Form {
+  function getForm(formHash: FormHash): Form | undefined {
     return formHashToForm(formHash, forms.value, exprs.value);
   }
 
