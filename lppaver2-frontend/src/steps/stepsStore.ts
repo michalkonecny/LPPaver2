@@ -138,8 +138,8 @@ export const useStepsStore = defineStore('steps', () => {
         _problem2step.value[problemHash] = step;
       }
     }
-    // set the root problem to the problem of the first step (if it exists)
-    if (stepsExceptInitDone.length > 0) {
+    // if not set, set the root problem to the problem of the first step (if it exists)
+    if (rootProblem.value === null && stepsExceptInitDone.length > 0) {
       const firstStepProblem = getStepProblem(stepsExceptInitDone[0]!);
       if (firstStepProblem) {
         setInitProblem(firstStepProblem);
