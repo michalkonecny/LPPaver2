@@ -206,18 +206,14 @@ lppStepsController runId stateMV reportProgress =
       currentTime <- getCurrentTime
       maybeLastSentTime <- modifyMVar stateMV $ \state -> do
         -- add the new step to the state
-        -- putStrLn $ "last sent time before adding step: " ++ show (fmap (.lastSentTime) (Map.lookup runId state.runs))
         let updatedState = ServerState.addNewSteps runId [step] (getStepBoxes step) state
         let lastSentTime = (updatedState.runs Map.! runId).lastSentTime
-        -- putStrLn $ "last sent time after adding step: " ++ show lastSentTime
         pure (updatedState, lastSentTime)
       -- report progress to the client but no more than once every 0.5 seconds
       case maybeLastSentTime of
         Nothing -> do
-          putStrLn $ "No last sent time for runId " ++ show runId ++ ", reporting progress."
           return ()
         Just lastSentTime -> do
-          putStrLn $ "Since last report: " ++ show (diffUTCTime currentTime lastSentTime) ++ " seconds"
           when (diffUTCTime currentTime lastSentTime > 0.5) reportProgress
       -- putStrLn $ "Step for runId " ++ show runId ++ ": " ++ show step
 
