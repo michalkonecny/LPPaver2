@@ -134,7 +134,7 @@ export const useProverStore = defineStore('prover', () => {
           boxes.value = { ...boxes.value, ...message.contents.boxes };
           break;
         }
-        case 'ResponseFormulaNodes': {
+        case 'ResponseNewFormulaNodes': {
           exprs.value = { ...exprs.value, ...message.contents.exprs };
           forms.value = { ...forms.value, ...message.contents.forms };
           break;
@@ -154,7 +154,7 @@ export const useProverStore = defineStore('prover', () => {
             if (status === 'SolverFinished') {
               // update all formula nodes in case there are new ones arising due to formula simplifications in the steps
               sendProverRequest(ws, {
-                tag: 'RequestGetAllFormulaNodes',
+                tag: 'RequestKeepGettingFormulaNodes',
                 contents: [],
               });
             }
@@ -176,11 +176,11 @@ export const useProverStore = defineStore('prover', () => {
   // initialise the store
   /////////////////////////
 
-  // whenever exampleProblems is assigned, request all formula nodes
+  // whenever exampleProblems is assigned, request the formula fragments stream
   watch(exampleProblems, async () => {
     const ws = await getProverWS();
     const message: ProverRequest = {
-      tag: 'RequestGetAllFormulaNodes',
+      tag: 'RequestKeepGettingFormulaNodes',
       contents: [],
     };
     sendProverRequest(ws, message);

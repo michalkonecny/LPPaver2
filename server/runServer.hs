@@ -9,7 +9,7 @@ import AERN2.MP qualified as MP
 import AERN2.MP.Affine (MPAffine (..), MPAffineConfig (..))
 import BranchAndPrune.BranchAndPrune (Problem (..))
 import BranchAndPrune.BranchAndPrune qualified as BP
-import Control.Concurrent (MVar, modifyMVar, modifyMVar_, newMVar, takeMVar)
+import Control.Concurrent (MVar, modifyMVar, modifyMVar_, newMVar, readMVar, forkIO)
 import Control.Monad (forever, when)
 import Control.Monad.IO.Unlift (MonadIO (liftIO))
 import Control.Monad.Logger (runStdoutLoggingT)
@@ -17,7 +17,7 @@ import Data.Aeson qualified as A
 import Data.Map qualified as Map
 import Data.Text (Text)
 import Data.Text.Encoding qualified as T
-import Data.Time.Clock (diffUTCTime, getCurrentTime)
+import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
 import GHC.Generics (Generic)
 import GHC.Records
 import LPPaver2.BranchAndPrune (LPPBPParams (..), LPPStep, getStepBoxes, lppBranchAndPrune)
@@ -42,19 +42,40 @@ application pending = do
   putStrLn "Client connected."
   -- withPingThread conn 30 (return ()) (forever (requestResponse conn))
   stateMVar <- newMVar ServerState.new
-  forever $ requestResponse stateMVar conn
+  stateChangeHandlersMVar <- newMVar ([] :: [ServerState -> IO ()])
+  forever $ requestResponse stateMVar stateChangeHandlersMVar conn
 
-requestResponse :: MVar ServerState -> WS.Connection -> IO ()
-requestResponse stateMVar conn = do
+requestResponse :: MVar ServerState -> MVar [ServerState -> IO ()] -> WS.Connection -> IO ()
+requestResponse stateMVar stateChangeHandlersMVar conn = do
   putStrLn "waiting for message from client..."
   msg <- WS.receiveData conn :: IO Text
-  -- putStrLn $ "Received message: " ++ T.unpack msg
-  -- TODO: fork ?
   request <- parseRequest msg
-  modifyMVar stateMVar $ \state -> do
-    newState <- handleRequest state request respond
-    return (newState, ())
+  state <- readMVar stateMVar
+  _ <-forkIO $
+    handleRequest
+      ( RequestHandlerInfo
+          { request,
+            stateOnRequest = state,
+            addStateChangeHandler,
+            modifyState,
+            respond
+          }
+      )
+  pure ()
   where
+    addStateChangeHandler :: (ServerState -> IO ()) -> IO ()
+    addStateChangeHandler handler = do
+      modifyMVar_ stateChangeHandlersMVar $ \handlers -> do
+        pure (handlers ++ [handler])
+    modifyState :: (ServerState -> (ServerState, t)) -> IO t
+    modifyState fn = do
+      modifyMVar stateMVar $ \state -> do
+        let (newState, result) = fn state
+        -- execute the handlers for the new state
+        handlers <- readMVar stateChangeHandlersMVar
+        mapM_ (\handler -> handler newState) handlers
+        -- save the new state to stateMVar
+        pure (newState, result)
     respond :: Response -> IO ()
     respond response = do
       let responseJSON = A.encode response
@@ -76,13 +97,17 @@ data ExampleProblemsResponse = ExampleProblemsResponse
 
 instance IsRequestResponse GetExampleProblemsRequest where
   type ResponseType GetExampleProblemsRequest = ExampleProblemsResponse
-  handleRequest state _ respond = do
-    let problems = exampleProblemsList
-    let scopes = map (\(_, p) -> p.problem.scope) problems
-    let problemForms = map (\(_, p) -> p.problem.constraint) problems
-    let newState = ServerState.addBoxes scopes $ ServerState.addForms problemForms state
+  handleRequest RequestHandlerInfo {modifyState, respond} = do
+    putStrLn "handling GetExampleProblemsRequest"
+    newState <- modifyState $ \state ->
+      let newState = ServerState.addBoxes scopes $ ServerState.addForms problemForms state
+       in (newState, newState)
+    putStrLn "sending ExampleProblemsResponse"
     respond $ ExampleProblemsResponse {problems = problems, boxes = newState.boxes}
-    pure newState
+    where
+      problems = exampleProblemsList
+      scopes = map (\(_, p) -> p.problem.scope) problems
+      problemForms = map (\(_, p) -> p.problem.constraint) problems
 
 instance A.FromJSON GetExampleProblemsRequest where
   parseJSON = A.genericParseJSON aesonOptions
@@ -94,25 +119,26 @@ instance A.ToJSON ExampleProblemsResponse where
 --- Formula/expression nodes ---
 --------------------------------
 
-data GetAllFormulaNodesRequest = GetAllFormulaNodesRequest
+data KeepGettingFormulaNodesRequest = KeepGettingFormulaNodesRequest
   deriving (Generic, Show)
 
-data FormulaNodesResponse = FormulaNodesResponse
+data NewFormulaNodesResponse = NewFormulaNodesResponse
   { exprs :: ExprStore,
     forms :: FormStore
   }
   deriving (Generic)
 
-instance IsRequestResponse GetAllFormulaNodesRequest where
-  type ResponseType GetAllFormulaNodesRequest = FormulaNodesResponse
-  handleRequest state _ respond = do
-    respond $ FormulaNodesResponse {exprs = state.exprs, forms = state.forms}
-    pure state
+instance IsRequestResponse KeepGettingFormulaNodesRequest where
+  type ResponseType KeepGettingFormulaNodesRequest = NewFormulaNodesResponse
+  handleRequest RequestHandlerInfo {stateOnRequest, respond} = do
+    let state = stateOnRequest
+    -- TODO
+    respond $ NewFormulaNodesResponse {exprs = state.exprs, forms = state.forms}
 
-instance A.FromJSON GetAllFormulaNodesRequest where
+instance A.FromJSON KeepGettingFormulaNodesRequest where
   parseJSON = A.genericParseJSON aesonOptions
 
-instance A.ToJSON FormulaNodesResponse where
+instance A.ToJSON NewFormulaNodesResponse where
   toEncoding = A.genericToEncoding aesonOptions
 
 ------------------------------------------------
@@ -160,62 +186,57 @@ data SolverRunStatusUpdate = SolverRunStatusUpdate
 
 instance IsRequestResponse RunSolverRequest where
   type ResponseType RunSolverRequest = SolverRunStatusUpdate
-  handleRequest state request respond = do
-    stateMV <- liftIO $ newMVar state -- all updates are done via modifyMVar to ensure atomicity
-
+  handleRequest RequestHandlerInfo {request, modifyState, respond} = do
     -- report solver has started
-    respond $ SolverRunStatusUpdate {runId, status = SolverRunning, newSteps = [], newBoxes = Map.empty}    
-    setLastSentTime runId stateMV -- mark the time of this initial update
+    respond $ SolverRunStatusUpdate {runId, status = SolverRunning, newSteps = [], newBoxes = Map.empty}
+    setLastSentTime runId modifyState -- mark the time of this initial update
 
     -- run the solver with our steps controller
     _ <- runStdoutLoggingT $ do
       lppBranchAndPrune
         (getEvalArithmetic request.arithmetic)
-        (lppStepsController runId stateMV (reportProgress stateMV)) -- accummulates steps and boxes and reports them to the client
+        (lppStepsController runId modifyState reportProgress) -- accummulates steps and boxes and reports them to the client
         (mkParams request)
     -- report any remaining new steps after the solver has finished
-    reportProgress stateMV
+    reportProgress
     -- report solver has finished
     respond $ SolverRunStatusUpdate {runId, status = SolverFinished, newSteps = [], newBoxes = Map.empty}
-    liftIO $ takeMVar stateMV
     where
       runId = request.runId
       -- a helper to report new steps
-      reportProgress stateMV =
+      reportProgress =
         do
-          (newSteps, newBoxes) <- modifyMVar stateMV $ \state2 -> do
-            putStrLn $ "Reporting progress for runId " ++ show runId
-            pure $ ServerState.processNewSteps runId state2
+          (newSteps, newBoxes) <- modifyState $ ServerState.processNewSteps runId
           respond $ SolverRunStatusUpdate {runId, status = SolverRunning, newSteps, newBoxes}
-          setLastSentTime runId stateMV
+          setLastSentTime runId modifyState
 
-setLastSentTime :: RunID -> MVar ServerState -> IO ()
-setLastSentTime runId state =
-  modifyMVar_ state $ \state2 -> do
-    currentTime <- getCurrentTime
-    putStrLn $ "Setting last sent time for runId " ++ show runId
-    let newState = ServerState.setLastSentTime runId currentTime state2
-    -- putStrLn $ "New last sent time: " ++ show (newState.runs Map.! runId).lastSentTime
-    pure newState
+setLastSentTime :: RunID -> ModifyState () -> IO ()
+setLastSentTime runId modifyState = do
+  currentTime <- getCurrentTime
+  _ <- modifyState $ \state ->
+    let newState = ServerState.setLastSentTime runId currentTime state
+     in (newState, ())
+  pure ()
 
-lppStepsController :: (MonadIO m) => RunID -> MVar ServerState -> IO () -> BP.StepsController m LPPStep
-lppStepsController runId stateMV reportProgress =
+lppStepsController :: (MonadIO m) => RunID -> ModifyState (Maybe UTCTime) -> IO () -> BP.StepsController m LPPStep
+lppStepsController runId modifyState reportProgress =
   BP.StepsController {reportStep}
   where
     reportStep step = liftIO $ do
       currentTime <- getCurrentTime
-      maybeLastSentTime <- modifyMVar stateMV $ \state -> do
+      maybeLastSentTime <- modifyState $ \state ->
         -- add the new step to the state
         let updatedState = ServerState.addNewSteps runId [step] (getStepBoxes step) state
-        let lastSentTime = (updatedState.runs Map.! runId).lastSentTime
-        pure (updatedState, lastSentTime)
+            lastSentTime = (updatedState.runs Map.! runId).lastSentTime
+         in (updatedState, lastSentTime)
       -- report progress to the client but no more than once every 0.5 seconds
       case maybeLastSentTime of
         Nothing -> do
           return ()
         Just lastSentTime -> do
           when (diffUTCTime currentTime lastSentTime > 0.5) reportProgress
-      -- putStrLn $ "Step for runId " ++ show runId ++ ": " ++ show step
+
+-- putStrLn $ "Step for runId " ++ show runId ++ ": " ++ show step
 
 mkParams :: RunSolverRequest -> LPPBPParams
 mkParams request =
@@ -249,34 +270,58 @@ instance A.ToJSON SolverRunStatusUpdate where
 --- Request/Response boilerplate and parsing ---
 ------------------------------------------------
 
+type ModifyState t = (ServerState -> (ServerState, t)) -> IO t
+
+data RequestHandlerInfo request = RequestHandlerInfo
+  { request :: request,
+    stateOnRequest :: ServerState,
+    addStateChangeHandler :: (ServerState -> IO ()) -> IO (),
+    modifyState :: forall t. ModifyState t,
+    respond :: ResponseType request -> IO ()
+  }
+
 class IsRequestResponse request where
   type ResponseType request
   handleRequest ::
-    ServerState ->
-    request ->
-    (ResponseType request -> IO ()) ->
-    IO ServerState
+    RequestHandlerInfo request ->
+    IO ()
 
 data Request
   = RequestGetExampleProblems GetExampleProblemsRequest
-  | RequestGetAllFormulaNodes GetAllFormulaNodesRequest
+  | RequestKeepGettingFormulaNodes KeepGettingFormulaNodesRequest
   | RequestRunSolver RunSolverRequest
   deriving (Generic, Show)
 
 data Response
   = ResponseExampleProblems ExampleProblemsResponse
-  | ResponseFormulaNodes FormulaNodesResponse
+  | ResponseNewFormulaNodes NewFormulaNodesResponse
   | ResponseSolverRunStatusUpdate SolverRunStatusUpdate
   deriving (Generic)
 
 instance IsRequestResponse Request where
   type ResponseType Request = Response
-  handleRequest state (RequestGetExampleProblems req) respond = do
-    handleRequest state req (respond . ResponseExampleProblems)
-  handleRequest state (RequestGetAllFormulaNodes req) respond = do
-    handleRequest state req (respond . ResponseFormulaNodes)
-  handleRequest state (RequestRunSolver req) respond = do
-    handleRequest state req (respond . ResponseSolverRunStatusUpdate)
+  handleRequest info = do
+    case info.request of
+      RequestGetExampleProblems req ->
+        handleRequest (delegatedRequestInfo req ResponseExampleProblems info)
+      RequestKeepGettingFormulaNodes req ->
+        handleRequest (delegatedRequestInfo req ResponseNewFormulaNodes info)
+      RequestRunSolver req ->
+        handleRequest (delegatedRequestInfo req ResponseSolverRunStatusUpdate info)
+
+delegatedRequestInfo ::
+  request2 ->
+  (ResponseType request2 -> ResponseType request1) ->
+  RequestHandlerInfo request1 ->
+  RequestHandlerInfo request2
+delegatedRequestInfo request2 response2to1 RequestHandlerInfo {..} =
+  RequestHandlerInfo
+    { request = request2,
+      stateOnRequest = stateOnRequest,
+      modifyState = modifyState,
+      addStateChangeHandler = addStateChangeHandler,
+      respond = respond . response2to1
+    }
 
 instance A.FromJSON Request where
   parseJSON = A.genericParseJSON aesonOptions
