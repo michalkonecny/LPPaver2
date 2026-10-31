@@ -35,7 +35,11 @@
   const selectedArithType = ref<ArithType>('BallArithmetic');
   const selectedPrecision = ref<number>(100);
   const selectedMaxTerms = ref<number>(10);
-  const useSimplex = ref<boolean>(false);
+  const useLinearPrune = ref<boolean>(true);
+  const useSimplexAA = ref<boolean>(false);
+  const useSimplexAD = ref<boolean>(false);
+  // AA linearisations need affine-arithmetic evaluation
+  const canUseSimplexAA = computed(() => selectedArithType.value === 'AffineArithmetic');
 
   const selectedArithmetic = computed<Arithmetic>(() => {
     return selectedArithType.value === 'BallArithmetic'
@@ -72,7 +76,11 @@
       selectedProblemName.value,
       paramsObj,
       selectedArithmetic.value,
-      useSimplex.value,
+      {
+        useLinearPrune: useLinearPrune.value,
+        useSimplexAA: useSimplexAA.value && canUseSimplexAA.value,
+        useSimplexAD: useSimplexAD.value,
+      },
       giveUpAccuracy.value,
       numberOfThreads.value,
     );
@@ -130,10 +138,26 @@
       <input
         class="form-check-input"
         type="checkbox"
-        id="useSimplex"
-        v-model="useSimplex"
+        id="useLinearPrune"
+        v-model="useLinearPrune"
       />
-      <label class="form-check-label" for="useSimplex">Use simplex pruning</label>
+      <label class="form-check-label" for="useLinearPrune">Linear pruning</label>
+    </div>
+    <div class="form-check">
+      <input
+        class="form-check-input"
+        type="checkbox"
+        id="useSimplexAA"
+        v-model="useSimplexAA"
+        :disabled="!canUseSimplexAA"
+      />
+      <label class="form-check-label" for="useSimplexAA" title="Requires affine arithmetic"
+        >Simplex (AA)</label
+      >
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="useSimplexAD" v-model="useSimplexAD" />
+      <label class="form-check-label" for="useSimplexAD">Simplex (AD)</label>
     </div>
     <!-- Input max size of box before giving up -->
     <label for="giveUpAccuracy" class="form-label">Max box size: </label>

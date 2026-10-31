@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace the `useSimplex` switch with independent `useLinearPrune`, `useSimplexAA` and `useSimplexAD` switches in the pruning method, solver request and frontend. Linearisations are no longer selected by the evaluation arithmetic: AD corner linearisations also work with affine evaluation (using ball enclosures of the affine values), AA and AD linearisations are combined into one LP when both are enabled, and AA simplex has no effect under interval evaluation.
+- Replace the `CanLineariseEval` and `CanProvideSimplexRelaxations` classes with explicit relaxation sources (`exactRelaxation`, `affineRelaxations`, `adCornerRelaxations`) combined by `relaxComparisonWith`; `linearPruneWith` and `simplexPrune` now take the resulting relaxation function instead of evaluated expression values.
 - Make `simplexPrune` a pure function; the simplex-method solver no longer requires IO.
 - Pin simplex-method to `3e2a86b`, which drops the `MonadIO` requirement from the two-phase simplex solver.
 - Collect formula variables by visiting each reachable formula and expression hash once, avoiding repeated expansion of shared DAGs.

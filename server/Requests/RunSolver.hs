@@ -56,7 +56,9 @@ data RunSolverRequest = RunSolverRequest
     problemName :: String,
     paramValues :: Map.Map String Double,
     arithmetic :: Arithmetic,
-    useSimplex :: Bool,
+    useLinearPrune :: Bool,
+    useSimplexAA :: Bool,
+    useSimplexAD :: Bool,
     giveUpAccuracy :: Double,
     numberOfThreads :: Int
   }
@@ -89,7 +91,9 @@ instance IsRequestResponse RunSolverRequest where
         lppBranchAndPrune
           ( LPPPruningMethod
               { evalArithmetic = getEvalArithmetic request.arithmetic,
-                useSimplex = request.useSimplex,
+                useLinearPrune = request.useLinearPrune,
+                useSimplexAA = request.useSimplexAA,
+                useSimplexAD = request.useSimplexAD,
                 giveUpAccuracy = convert request.giveUpAccuracy
               }
           )

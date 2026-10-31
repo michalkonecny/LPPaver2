@@ -2,11 +2,14 @@ module LPPaver2.LinearPrune
   ( extractCIEorDIE,
     IEFormType (..),
     linearPrune,
-    linearPruneWithEvalValues,
+    linearPruneWith,
     LinearPruneResult (..),
     LinearRelaxation (..),
-    CanLineariseEval (..),
-    linearRelaxation,
+    RelaxComparison,
+    relaxComparisonWith,
+    exactRelaxation,
+    affineRelaxations,
+    adCornerRelaxations,
     tightenBoxByBounds,
     domainWithinAccuracy,
   )
@@ -19,11 +22,14 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import GHC.Records
 import LPPaver2.Linearisation
-  ( CanLineariseEval (..),
-    LinearRelaxation (..),
-    linearRelaxation,
+  ( LinearRelaxation (..),
+    RelaxComparison,
+    adCornerRelaxations,
+    affineRelaxations,
+    exactRelaxation,
+    relaxComparisonWith,
   )
-import LPPaver2.RealConstraints (ExprHash, ExprStore, Var)
+import LPPaver2.RealConstraints (ExprHash, Var)
 import LPPaver2.RealConstraints.Boxes
 import LPPaver2.RealConstraints.Form
 import MixedTypesNumPrelude
@@ -102,20 +108,20 @@ data LinearPruneResult = LinearPruneResult
 domainWithinAccuracy :: Rational -> MP.MPBall -> Bool
 domainWithinAccuracy giveUpAccuracy ball = 2 * MP.radius ball <= giveUpAccuracy
 
+-- | Linear pruning using only the comparisons that are exactly linear.
 linearPrune :: Rational -> BP.Problem Form Box -> Maybe LinearPruneResult
-linearPrune giveUpAccuracy problem = linearPruneWithEvalValues giveUpAccuracy problem (Map.empty :: Map.Map ExprHash MP.MPBall)
+linearPrune giveUpAccuracy problem = linearPruneWith giveUpAccuracy problem (relaxComparisonWith problem.constraint.nodesE [])
 
-linearPruneWithEvalValues ::
-  (CanLineariseEval r) =>
+linearPruneWith ::
   Rational ->
   BP.Problem Form Box ->
-  Map.Map ExprHash r ->
+  RelaxComparison ->
   Maybe LinearPruneResult
-linearPruneWithEvalValues giveUpAccuracy BP.Problem {scope, constraint} exprValues =
+linearPruneWith giveUpAccuracy BP.Problem {scope, constraint} relaxComparison =
   let maybeIEInfo = extractCIEorDIE constraint
    in case maybeIEInfo of
-        Just (cieForm, CIE) -> linearPruneCIE giveUpAccuracy scope cieForm.nodesE exprValues (extractIEsFromCIE cieForm)
-        Just (ieForm, IE) -> linearPruneCIE giveUpAccuracy scope ieForm.nodesE exprValues [ieForm] -- TODO: try both CIE and DIE and use the better result
+        Just (cieForm, CIE) -> linearPruneCIE giveUpAccuracy scope relaxComparison (extractIEsFromCIE cieForm)
+        Just (ieForm, IE) -> linearPruneCIE giveUpAccuracy scope relaxComparison [ieForm] -- TODO: try both CIE and DIE and use the better result
         -- TODO: implement linear pruning for disjunctions of inequalities
         _ -> Nothing -- not a form suitable for linear pruning
 
@@ -137,8 +143,8 @@ data TightenResult
   | TightenNoImprovement
   | TightenImproved Box
 
-linearPruneCIE :: (CanLineariseEval r) => Rational -> Box -> ExprStore -> Map.Map ExprHash r -> [Form] -> Maybe LinearPruneResult
-linearPruneCIE giveUpAccuracy scope exprNodes exprValues ies
+linearPruneCIE :: Rational -> Box -> RelaxComparison -> [Form] -> Maybe LinearPruneResult
+linearPruneCIE giveUpAccuracy scope relaxComparison ies
   | any isInfeasible extractionResults =
       Just
         LinearPruneResult
@@ -156,7 +162,6 @@ linearPruneCIE giveUpAccuracy scope exprNodes exprValues ies
         TightenNoImprovement -> Nothing
         TightenImproved newBox -> Just (makeResult newBox)
   where
-    relaxComparison = linearRelaxation exprNodes exprValues
     extractionResults = P.map extractVarBound ies
     varBoundsFromInequalities = P.concatMap boundsFromResult extractionResults
 
@@ -180,9 +185,7 @@ linearPruneCIE giveUpAccuracy scope exprNodes exprValues ies
         _ -> Bounds [] -- not a comparison, shouldn't happen since we only call this on IEs
     boundsFromLessOrEqual :: ExprHash -> ExprHash -> BoundExtraction
     boundsFromLessOrEqual e1 e2 =
-      case relaxComparison e1 e2 of
-        Just relaxation -> boundsFromRelaxation relaxation
-        Nothing -> Bounds []
+      P.foldl mergeExtractions (Bounds []) (boundsFromRelaxation <$> relaxComparison e1 e2)
 
     mergeExtractions :: BoundExtraction -> BoundExtraction -> BoundExtraction
     mergeExtractions Infeasible _ = Infeasible
