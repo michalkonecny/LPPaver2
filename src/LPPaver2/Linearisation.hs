@@ -34,9 +34,9 @@ import LPPaver2.RealConstraints.IntervalAD
   ( IntervalAD (partials),
     evalIntervalAD,
     mpBallBounds,
-    subtractIntervalAD,
   )
 import MixedTypesNumPrelude
+import Numeric.CollectErrors qualified as CN
 import Prelude qualified as P
 
 data AffineExpression = AffineExpression
@@ -212,22 +212,22 @@ affineToRelaxation sources affine =
 -- the values computed during differentiation.
 adCornerRelaxations :: Box -> ExprStore -> Map.Map ExprHash MP.MPBall -> RelaxComparison
 adCornerRelaxations scope exprNodes exprValues e1 e2 =
-  case derivativeValue of
-    Just derivative ->
+  case CN.toEither derivativeValue of
+    Right derivative ->
       case (evalAtCorner leftDomains, evalAtCorner rightDomains) of
         (Just valueAtLeft, Just valueAtRight) ->
           [ leftRelaxation valueAtLeft derivative.partials,
             rightRelaxation valueAtRight derivative.partials
           ]
         _ -> []
-    Nothing -> []
+    Left _ -> []
   where
     domains = scope.box_.varDomains
     leftDomains = Map.map pointAtLower domains
     rightDomains = Map.map pointAtUpper domains
 
     -- The comparison e1 <= e2 is represented as t = e2 - e1 >= 0.
-    derivativeValue = subtractIntervalAD <$> evalIntervalAD exprNodes exprValues domains e2 <*> evalIntervalAD exprNodes exprValues domains e1
+    derivativeValue = evalIntervalAD exprNodes exprValues domains e2 - evalIntervalAD exprNodes exprValues domains e1
 
     evalAtCorner cornerDomains = do
       value1 <- Map.lookup e1 values
