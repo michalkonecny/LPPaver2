@@ -8,10 +8,6 @@ import GHC.Records (HasField (getField))
 import LPPaver2.LinearPrune
 import LPPaver2.PruneSpecSupport
 import LPPaver2.RealConstraints.Boxes (Box (..), Box_ (..), addParamValuesToBox, mkBox)
-import LPPaver2.RealConstraints.Eval
-  ( CanEval,
-    HasKleeneanComparison,
-  )
 import LPPaver2.RealConstraints.EvalArithmetic.AffArith ()
 import LPPaver2.RealConstraints.EvalArithmetic.MPBall ()
 import LPPaver2.RealConstraints.Expr
@@ -91,7 +87,7 @@ spec = do
           nonie = formTrue
       extractCIEorDIE ((nonie || cie1) && (nonie && cie2)) `shouldBe` Just (cie2, CIE)
 
-  describe "linearPruneWithEvalValues" $ do
+  describe "linearPruneWith" $ do
     it "uses current-box affine sources across multiple nonlinear comparisons" $ do
       let form = (sin (x - x) + y <= exprLit 0.5) && (sin (y - y) + x <= exprLit 0.25)
           boxes =
@@ -101,7 +97,7 @@ spec = do
 
       P.mapM_
         (\box -> do
-           let result = linearPruneAfterSimplify sampleMPAffine box form
+           let result = linearPruneAAAfterSimplify box form
            assertPrunedUpperBoundWithin aaBoundTolerance "x" 0.25 result
            assertPrunedUpperBoundWithin aaBoundTolerance "y" 0.5 result
         )
@@ -117,23 +113,23 @@ spec = do
           (_, exprValues) = simplifiedFormAndValues sampleMPAffine box form
           -- Make two different source variables claim the same noise symbol.
           ambiguousValues = Map.adjust (\affine -> affine {errTerms = (exprValues Map.! x.root).errTerms}) y.root exprValues
-          relax = linearRelaxation form.nodesE ambiguousValues
+          relax = relaxComparisonWith form.nodesE [affineRelaxations form.nodesE ambiguousValues]
 
       case (relax left1.root right1.root, relax left2.root right2.root) of
-        (Nothing, Nothing) -> pure ()
+        ([], []) -> pure ()
         _ -> expectationFailure "expected both affine relaxations to reject ambiguous sources"
       case relax x.root right1.root of
-        Just relaxation -> do
+        [relaxation] -> do
           relaxation.coefficients `shouldBe` Map.singleton "x" (rational 1)
           relaxation.rhs `shouldBe` rational 0.5
-        Nothing -> expectationFailure "expected exact relaxation to remain available"
+        _ -> expectationFailure "expected exact relaxation to remain available"
 
     it "uses an affine relaxation when available" $ do
       let form = sin (x - x) + y <= exprLit 0.5
           box = mkBox [("x", (0.0, 1.0)), ("y", (0.0, 1.0))]
 
-      let iaResult = linearPruneAfterSimplify sampleMPBall box form
-          aaResult = linearPruneAfterSimplify sampleMPAffine box form
+      let iaResult = linearPruneExactAfterSimplify box form
+          aaResult = linearPruneAAAfterSimplify box form
 
       expectNoPruning iaResult
       assertPrunedLowerBoundWithin aaBoundTolerance "y" 0.0 aaResult
@@ -143,8 +139,8 @@ spec = do
       let form = exprLit 0.5 <= sin (x - x) + y
           box = mkBox [("x", (0.0, 1.0)), ("y", (0.0, 1.0))]
 
-      let iaResult = linearPruneAfterSimplify sampleMPBall box form
-          aaResult = linearPruneAfterSimplify sampleMPAffine box form
+      let iaResult = linearPruneExactAfterSimplify box form
+          aaResult = linearPruneAAAfterSimplify box form
 
       expectNoPruning iaResult
       assertPrunedLowerBoundWithin aaBoundTolerance "y" 0.5 aaResult
@@ -209,13 +205,17 @@ spec = do
 
       assertInfeasible $ linearPrune 2.0 BP.Problem {scope = box, constraint = form}
 
-linearPruneAfterSimplify ::
-  (CanEval r, HasKleeneanComparison r, CanLineariseEval r) =>
-  r ->
-  Box ->
-  Form ->
-  Maybe LinearPruneResult
-linearPruneAfterSimplify sampleR box form =
-  linearPruneWithEvalValues noGiveUpAccuracy BP.Problem {scope = box, constraint = simplifiedForm} exprValues
+-- | Linear pruning with exact relaxations only after simplifying in interval arithmetic.
+linearPruneExactAfterSimplify :: Box -> Form -> Maybe LinearPruneResult
+linearPruneExactAfterSimplify box form =
+  linearPrune noGiveUpAccuracy BP.Problem {scope = box, constraint = simplifiedForm}
   where
-    (simplifiedForm, exprValues) = simplifiedFormAndValues sampleR box form
+    (simplifiedForm, _) = simplifiedFormAndValues sampleMPBall box form
+
+-- | Linear pruning with affine relaxations after simplifying in affine arithmetic.
+linearPruneAAAfterSimplify :: Box -> Form -> Maybe LinearPruneResult
+linearPruneAAAfterSimplify box form =
+  linearPruneWith noGiveUpAccuracy BP.Problem {scope = box, constraint = simplifiedForm} $
+    relaxComparisonWith simplifiedForm.nodesE [affineRelaxations simplifiedForm.nodesE exprValues]
+  where
+    (simplifiedForm, exprValues) = simplifiedFormAndValues sampleMPAffine box form

@@ -1,12 +1,9 @@
 module LPPaver2.SimplexPrune
   ( simplexPrune,
-    CanProvideSimplexRelaxations (..),
   )
 where
 
-import AERN2.MP (HasPrecision (..), mpBallP)
 import AERN2.MP qualified as MP
-import AERN2.MP.Affine (MPAffine)
 import Control.Monad.Logger (runNoLoggingT)
 import Data.Functor.Identity (runIdentity)
 import Data.Map qualified as Map
@@ -18,144 +15,30 @@ import LPPaver2.LinearPrune
     tightenBoxByBounds,
   )
 import LPPaver2.Linearisation
-  ( CanLineariseEval,
-    LinearRelaxation (..),
-    linearRelaxation,
+  ( LinearRelaxation (..),
+    RelaxComparison,
   )
 import LPPaver2.RealConstraints.Boxes
   ( Box (box_),
     Box_ (varDomains, volumeVars),
-    boxWithHash,
   )
-import LPPaver2.RealConstraints.Eval (evalExpr)
-import LPPaver2.RealConstraints.EvalArithmetic.MPBall ()
 import LPPaver2.RealConstraints.Expr
   ( ExprHash,
-    ExprStore,
     Var,
   )
-import LPPaver2.RealConstraints.Expr qualified as Expr
 import LPPaver2.RealConstraints.Form
   ( BinaryComp (CompEq, CompLe, CompLeq, CompNeq),
     BinaryConn (ConnAnd),
-    Form (nodesE, root),
+    Form (root),
     FormF (FormBinary, FormComp, bconn, comp, e1, e2, f1, f2),
     FormHash,
     formVariables,
     lookupFormNode,
   )
-import LPPaver2.RealConstraints.IntervalAD
-  ( IntervalAD (partials),
-    evalIntervalAD,
-    mpBallBounds,
-    subtractIntervalAD,
-  )
 import Linear.Simplex.Solver.TwoPhase qualified as Simplex
 import Linear.Simplex.Types qualified as ST
 import MixedTypesNumPrelude
 import Prelude qualified as P
-
-class (CanLineariseEval r) => CanProvideSimplexRelaxations r where
-  nonlinearSimplexRelaxations ::
-    Box ->
-    ExprStore ->
-    Map.Map ExprHash r ->
-    ExprHash ->
-    ExprHash ->
-    [LinearRelaxation]
-
-instance CanProvideSimplexRelaxations MPAffine where
-  nonlinearSimplexRelaxations _ _ _ _ _ = []
-
-instance CanProvideSimplexRelaxations MP.MPBall where
-  nonlinearSimplexRelaxations scope exprNodes exprValues e1 e2 =
-    intervalCornerRelaxations scope exprNodes exprValues e1 e2
-
-simplexRelaxations ::
-  (CanProvideSimplexRelaxations r) =>
-  Box ->
-  ExprStore ->
-  Map.Map ExprHash r ->
-  ExprHash ->
-  ExprHash ->
-  [LinearRelaxation]
-simplexRelaxations scope exprNodes exprValues =
-  let relaxComparison = linearRelaxation exprNodes exprValues
-   in \e1 e2 ->
-        case relaxComparison e1 e2 of
-          Just relaxation -> [relaxation]
-          Nothing -> nonlinearSimplexRelaxations scope exprNodes exprValues e1 e2
-
-intervalCornerRelaxations :: Box -> ExprStore -> Map.Map ExprHash MP.MPBall -> ExprHash -> ExprHash -> [LinearRelaxation]
-intervalCornerRelaxations scope exprNodes exprValues e1 e2 =
-  case derivativeValue of
-    Just derivative ->
-      case (evalAtCorner leftDomains, evalAtCorner rightDomains) of
-        (Just valueAtLeft, Just valueAtRight) ->
-          [ leftRelaxation valueAtLeft derivative.partials,
-            rightRelaxation valueAtRight derivative.partials
-          ]
-        _ -> []
-    Nothing -> []
-  where
-    domains = scope.box_.varDomains
-    leftDomains = Map.map pointAtLower domains
-    rightDomains = Map.map pointAtUpper domains
-
-    -- The comparison e1 <= e2 is represented as t = e2 - e1 >= 0.
-    derivativeValue = subtractIntervalAD <$> evalIntervalAD exprNodes exprValues domains e2 <*> evalIntervalAD exprNodes exprValues domains e1
-
-    evalAtCorner cornerDomains = do
-      value1 <- Map.lookup e1 values
-      value2 <- Map.lookup e2 values
-      pure $ value2 P.- value1
-      where
-        cornerBox = boxWithHash $ scope.box_ {varDomains = cornerDomains}
-        valuesAfterE1 =
-          evalExpr
-            sampleBall
-            cornerBox
-            Expr.Expr {Expr.nodes = exprNodes, Expr.root = e1}
-            Map.empty
-        values =
-          evalExpr
-            sampleBall
-            cornerBox
-            Expr.Expr {Expr.nodes = exprNodes, Expr.root = e2}
-            valuesAfterE1
-
-    sampleBall = mpBallP precision (rational 0)
-    precision = case Map.elems domains of
-      domain : _ -> getPrecision domain
-      [] -> MP.defaultPrecision
-
-    domainBounds =
-      [ (var, rational lower, rational upper)
-        | (var, domain) <- Map.toList domains,
-          let (lower, upper) = MP.endpoints domain
-      ]
-
-    derivativeBounds partialMap var =
-      case Map.lookup var partialMap of
-        Just derivative -> mpBallBounds derivative
-        Nothing -> (rational 0, rational 0)
-
-    upperBound = P.snd . mpBallBounds
-
-    leftRelaxation valueAtLeft partialMap =
-      LinearRelaxation
-        { coefficients = Map.fromList [(var, P.negate derivativeUpper) | (var, _, _) <- domainBounds, let (_, derivativeUpper) = derivativeBounds partialMap var],
-          rhs = upperBound valueAtLeft P.- sum [derivativeUpper P.* lower | (var, lower, _) <- domainBounds, let (_, derivativeUpper) = derivativeBounds partialMap var]
-        }
-
-    rightRelaxation valueAtRight partialMap =
-      LinearRelaxation
-        { coefficients = Map.fromList [(var, P.negate derivativeLower) | (var, _, _) <- domainBounds, let (derivativeLower, _) = derivativeBounds partialMap var],
-          rhs = upperBound valueAtRight P.- sum [derivativeLower P.* upper | (var, _, upper) <- domainBounds, let (derivativeLower, _) = derivativeBounds partialMap var]
-        }
-
-    pointAtLower = MP.endpointLAsInterval
-    pointAtUpper = MP.endpointRAsInterval
 
 -- | Create a mapping from LPPaver2 variable names (String) to simplex variable IDs (Int).
 createVarMapping :: Set.Set Var -> Box -> (Map.Map Var Int, Map.Map Int Var)
@@ -198,18 +81,13 @@ relaxationToSimplexConstraint varToInt relaxation =
 
 -- | Extract simplex constraints from a conjunction of inequalities.
 extractSimplexConstraints ::
-  (CanProvideSimplexRelaxations r) =>
-  Box ->
-  ExprStore ->
-  Map.Map ExprHash r ->
+  RelaxComparison ->
   Map.Map Var Int ->
   Form ->
   ConstraintExtraction
-extractSimplexConstraints scope exprNodes exprValues varToInt form0 =
+extractSimplexConstraints relaxComparison varToInt form0 =
   extractFromRoot form0.root
   where
-    relaxComparison = simplexRelaxations scope exprNodes exprValues
-
     extractFromRoot :: FormHash -> ConstraintExtraction
     extractFromRoot fH =
       case lookupFormNode form0 fH of
@@ -251,17 +129,17 @@ boxToVarDomains varToInt box =
 
 -- | Use the simplex method to tighten a box given linear constraints.
 -- For each constrained volume variable, maximize and minimize subject to all constraints.
+-- The constraints are linear relaxations of the comparisons in the form.
 -- Returns a tighter box if any improvement is found.
 simplexPrune ::
-  (CanProvideSimplexRelaxations r) =>
   Rational ->
   Box ->
   Form ->
-  Map.Map ExprHash r ->
+  RelaxComparison ->
   Maybe LinearPruneResult
-simplexPrune giveUpAccuracy scope simplifiedForm exprValues =
+simplexPrune giveUpAccuracy scope simplifiedForm relaxComparison =
   let (varToInt, intToVar) = createVarMapping (formVariables simplifiedForm) scope
-      constraintExtraction = extractSimplexConstraints scope simplifiedForm.nodesE exprValues varToInt simplifiedForm
+      constraintExtraction = extractSimplexConstraints relaxComparison varToInt simplifiedForm
       varDomains = boxToVarDomains varToInt scope
    in case constraintExtraction of
         Infeasible ->

@@ -11,6 +11,7 @@ import {
   type RunStatus,
   type ProverResponse,
   type ProverRequest,
+  type RunSolverRequest,
   sendProverRequest,
 } from './proverMessage';
 import type { Step } from '@/steps/steps';
@@ -76,7 +77,7 @@ export const useProverStore = defineStore('prover', () => {
     problemName: string,
     paramValues: Record<string, number>,
     arithmetic: Arithmetic,
-    useSimplex: boolean,
+    pruning: Pick<RunSolverRequest, 'useLinearPrune' | 'useSimplexAA' | 'useSimplexAD'>,
     giveUpAccuracy: number,
     numberOfThreads: number = 1,
   ) {
@@ -89,7 +90,7 @@ export const useProverStore = defineStore('prover', () => {
         problemName,
         paramValues,
         arithmetic,
-        useSimplex,
+        ...pruning,
         giveUpAccuracy,
         numberOfThreads,
       },
