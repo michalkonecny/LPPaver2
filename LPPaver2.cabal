@@ -58,6 +58,7 @@ library
     , base >=4.7 && <5
     , branch-and-prune
     , bytestring
+    , collect-errors
     , containers
     , hashable
     , hspec
@@ -102,6 +103,7 @@ executable lppaver2-server
     , base >=4.7 && <5
     , branch-and-prune
     , bytestring
+    , collect-errors
     , containers
     , hashable
     , hspec
@@ -147,6 +149,7 @@ test-suite LPPaver2-test
     , base >=4.7 && <5
     , branch-and-prune
     , bytestring
+    , collect-errors
     , containers
     , hashable
     , hspec

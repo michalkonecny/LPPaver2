@@ -31,6 +31,7 @@ dependencies:
 - time
 - unliftio-core
 - aeson
+- collect-errors
 - mixed-types-num
 - aern2-mp
 - aern2-affarith
