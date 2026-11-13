@@ -3,8 +3,10 @@ import { computed, reactive, readonly, ref, watch, type DeepReadonly, type Ref }
 import _ from 'lodash';
 import { getProverWS } from './proverWS';
 import type { Box, BoxHash } from '@/boxes/boxes';
+import type { EvalInfo } from '@/formulas/evalInfo';
 import { exprHashToExpr, type Expr, type ExprF, type ExprHash } from '@/formulas/exprs';
 import { formHashToForm, type Form, type FormF, type FormHash } from '@/formulas/forms';
+import { problemToProblemHash, type Problem, type ProblemHash } from '@/problems/problems';
 import {
   type ProblemWithParamSpec,
   type Arithmetic,
@@ -22,6 +24,8 @@ export type RunInfo = {
   paramValues: Record<string, number>;
   status: RunStatus;
   steps: Step[];
+  /** evaluation info of progress steps by their problem, only for the steps for which it has been requested */
+  evalInfos: Record<ProblemHash, EvalInfo>;
 };
 
 export const useProverStore = defineStore('prover', () => {
@@ -47,6 +51,8 @@ export const useProverStore = defineStore('prover', () => {
     resetRunId,
     startRun,
     getRunInfo,
+    requestEvalInfo,
+    getEvalInfo,
     exampleProblems,
   };
 
@@ -104,6 +110,7 @@ export const useProverStore = defineStore('prover', () => {
       paramValues,
       status: 'RequestSent',
       steps: [], // TODO: try this out
+      evalInfos: {},
     });
 
     currentRunId.value = runId;
@@ -118,6 +125,34 @@ export const useProverStore = defineStore('prover', () => {
     const runInfo = runs.value[runId];
     if (!runInfo) return null;
     return readonly(runInfo);
+  }
+
+  // evaluation info requests that have been sent and not answered yet
+  const pendingEvalInfoRequests = new Set<string>();
+
+  /**
+   * Ask the prover for the evaluation info of the progress step that solved the given problem,
+   * unless it is already available or has already been requested.
+   * The info becomes available via getEvalInfo when the prover responds.
+   */
+  async function requestEvalInfo(runId: string, problem: Problem) {
+    const problemHash = problemToProblemHash(problem);
+    const requestKey = `${runId}|${problemHash}`;
+    if (runs.value[runId]?.evalInfos[problemHash]) return;
+    if (pendingEvalInfoRequests.has(requestKey)) return;
+    pendingEvalInfoRequests.add(requestKey);
+
+    const ws = await getProverWS();
+    const message: ProverRequest = {
+      tag: 'RequestGetEvalInfo',
+      contents: { runId, problem: { scope: problem.scope, constraint: problem.constraint } },
+    };
+    sendProverRequest(ws, message);
+  }
+
+  /** The evaluation info of the step for the given problem, if it has been received (see requestEvalInfo). */
+  function getEvalInfo(runId: string, problem: Problem): EvalInfo | undefined {
+    return runs.value[runId]?.evalInfos[problemToProblemHash(problem)];
   }
 
   //////////////////////////////////////////
@@ -155,6 +190,19 @@ export const useProverStore = defineStore('prover', () => {
             }
           } else {
             console.warn(`Received run status for unknown runId ${runId}`);
+          }
+          break;
+        }
+        case 'ResponseEvalInfo': {
+          const { runId, problem, evalInfo } = message.contents;
+          const problemHash = problemToProblemHash(problem);
+          pendingEvalInfoRequests.delete(`${runId}|${problemHash}`);
+          if (!evalInfo) {
+            console.warn(
+              `Prover has no evaluation info for problem ${problemHash} in run ${runId}`,
+            );
+          } else if (runs.value[runId]) {
+            runs.value[runId].evalInfos[problemHash] = evalInfo;
           }
           break;
         }

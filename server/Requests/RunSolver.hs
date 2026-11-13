@@ -24,11 +24,11 @@ import GHC.Records
 import LPPaver2.BranchAndPrune (LPPBPParams (..), LPPPruningMethod (..), LPPStep, getStepBoxes, lppBranchAndPrune)
 import LPPaver2.ExampleProblems (LPPProblemWithParamSpec (..), exampleProblems, substituteParams)
 import LPPaver2.Export ()
-import LPPaver2.RealConstraints (EvalArithmetic (..))
+import LPPaver2.RealConstraints (EvalArithmetic (..), EvaluatedForm)
 import LPPaver2.RealConstraints.Boxes (BoxStore)
 import MixedTypesNumPrelude (convert, convertExactly)
 import RequestHandler (HandlerContinuation (..), IsRequestResponse (..), ModifyState, RequestHandlerInfo (..), aesonOptions)
-import ServerState (RunID (..))
+import ServerState (LPPStepNoEvalInfo, RunID (..))
 import ServerState qualified
 import System.IO.Unsafe (unsafePerformIO)
 import Prelude
@@ -70,7 +70,8 @@ data SolverRunStatus = SolverRunning | SolverFinished
 data SolverRunStatusUpdate = SolverRunStatusUpdate
   { runId :: RunID,
     status :: SolverRunStatus,
-    newSteps :: [LPPStep],
+    -- | The steps come without evaluation info, clients get it on demand using GetEvalInfoRequest.
+    newSteps :: [LPPStepNoEvalInfo],
     newBoxes :: BoxStore
   }
   deriving (Generic)
@@ -115,7 +116,7 @@ instance IsRequestResponse RunSolverRequest where
             pure RemoveHandler
           False -> pure KeepHandler
 
-lppStepsController :: (MonadIO m) => RunID -> ModifyState () -> BP.StepsController m LPPStep
+lppStepsController :: (MonadIO m) => RunID -> ModifyState () -> BP.StepsController m (LPPStep EvaluatedForm)
 lppStepsController runId modifyState =
   BP.StepsController {reportStep}
   where

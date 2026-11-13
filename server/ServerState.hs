@@ -1,6 +1,8 @@
 module ServerState
   ( RunID (..),
     RunInfo (..),
+    LPPStepNoEvalInfo,
+    ProblemKey,
     ServerState (..),
     new,
     addBoxes,
@@ -9,6 +11,7 @@ module ServerState
     startRun,
     finishRun,
     getNewRunSteps,
+    lookupEvalInfo,
     isRunFinished,
   )
 where
@@ -23,7 +26,7 @@ import GHC.Generics (Generic)
 import GHC.Records
 import BranchAndPrune.BranchAndPrune qualified as BP
 import LPPaver2.BranchAndPrune (LPPStep)
-import LPPaver2.RealConstraints (Box (..), BoxStore, ExprStore, Form (..), FormStore)
+import LPPaver2.RealConstraints (Box (..), BoxHash, BoxStore, EvaluatedForm, ExprStore, Form (..), FormHash, FormStore)
 import Prelude
 
 -- All fields are strict so that forcing a state to WHNF also forces the spines of its maps,
@@ -44,9 +47,18 @@ instance A.FromJSON RunID where
 instance A.ToJSON RunID where
   toEncoding = A.genericToEncoding A.defaultOptions
 
+-- | A step without its evaluation info.
+-- This is what clients are sent as the solver progresses; the evaluation info is sent only on demand.
+type LPPStepNoEvalInfo = LPPStep ()
+
+-- | Identifies a problem within a run by the hashes of its scope and constraint.
+type ProblemKey = (BoxHash, FormHash)
+
 data RunInfo = RunInfo
   { runID :: !RunID,
-    steps :: !(Seq LPPStep), -- all steps reported so far, in order
+    steps :: !(Seq LPPStepNoEvalInfo), -- all steps reported so far, in order
+    -- | The evaluation info of each progress step, indexed by the step's problem.
+    evalInfos :: !(Map.Map ProblemKey EvaluatedForm),
     finished :: !Bool
   }
 
@@ -77,19 +89,41 @@ addForms newForms state =
 
 -- | Record new steps for a run, together with their boxes and formula nodes.
 -- This is called by the solver threads for every step, so it needs to be cheap.
-addNewSteps :: RunID -> [LPPStep] -> BoxStore -> ServerState -> ServerState
+addNewSteps :: RunID -> [LPPStep EvaluatedForm] -> BoxStore -> ServerState -> ServerState
 addNewSteps runId newSteps newBoxes state =
   addForms newForms $
     addBoxes (Map.elems newBoxes) $
       state {runs = Map.alter (Just . addSteps) runId state.runs}
   where
     newForms = List.map (.constraint) $ List.concatMap BP.getStepProblems newSteps
-    addSteps Nothing = RunInfo {runID = runId, steps = Seq.fromList newSteps, finished = False}
-    addSteps (Just runInfo) = runInfo {steps = runInfo.steps <> Seq.fromList newSteps}
+    addSteps maybeRunInfo =
+      runInfo
+        { steps = runInfo.steps <> Seq.fromList (List.map dropEvalInfo newSteps),
+          evalInfos = Map.fromList (List.concatMap stepEvalInfo newSteps) `Map.union` runInfo.evalInfos
+        }
+      where
+        runInfo = maybe (emptyRunInfo runId) id maybeRunInfo
+
+emptyRunInfo :: RunID -> RunInfo
+emptyRunInfo runId =
+  RunInfo {runID = runId, steps = Seq.empty, evalInfos = Map.empty, finished = False}
+
+dropEvalInfo :: LPPStep EvaluatedForm -> LPPStepNoEvalInfo
+dropEvalInfo step = case step of
+  BP.InitStep {problem} -> BP.InitStep {problem}
+  BP.ProgressStep {problem, progressPaving} -> BP.ProgressStep {problem, progressPaving, evalInfo = ()}
+  BP.GiveUpOnProblemStep {problem} -> BP.GiveUpOnProblemStep {problem}
+  BP.AbortStep {detail} -> BP.AbortStep {detail}
+  BP.DoneStep -> BP.DoneStep
+
+stepEvalInfo :: LPPStep EvaluatedForm -> [(ProblemKey, EvaluatedForm)]
+stepEvalInfo step = case step of
+  BP.ProgressStep {problem, evalInfo} -> [((problem.scope.boxHash, problem.constraint.root), evalInfo)]
+  _ -> []
 
 startRun :: RunID -> ServerState -> ServerState
 startRun runId state =
-  state {runs = Map.insert runId RunInfo {runID = runId, steps = Seq.empty, finished = False} state.runs}
+  state {runs = Map.insert runId (emptyRunInfo runId) state.runs}
 
 finishRun :: RunID -> ServerState -> ServerState
 finishRun runId state =
@@ -97,13 +131,18 @@ finishRun runId state =
 
 -- | The steps of the run that are in the new state but not in the old state.
 -- Cheap, because steps are only ever appended.
-getNewRunSteps :: RunID -> ServerState -> ServerState -> [LPPStep]
+getNewRunSteps :: RunID -> ServerState -> ServerState -> [LPPStepNoEvalInfo]
 getNewRunSteps runId oldState newState =
   case Map.lookup runId newState.runs of
     Nothing -> []
     Just newRunInfo -> toList $ Seq.drop oldCount newRunInfo.steps
   where
     oldCount = maybe 0 (Seq.length . (.steps)) (Map.lookup runId oldState.runs)
+
+-- | The evaluation info of the progress step that solved the given problem in the given run, if any.
+lookupEvalInfo :: RunID -> ProblemKey -> ServerState -> Maybe EvaluatedForm
+lookupEvalInfo runId problemKey state =
+  Map.lookup runId state.runs >>= \runInfo -> Map.lookup problemKey runInfo.evalInfos
 
 isRunFinished :: RunID -> ServerState -> Bool
 isRunFinished runId state = maybe False (.finished) (Map.lookup runId state.runs)

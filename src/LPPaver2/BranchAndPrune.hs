@@ -38,9 +38,9 @@ type LPPProblem = BP.Problem Form Box
 
 type LPPPaving = BP.Paving Form Box Boxes
 
-type LPPStep = BP.Step LPPProblem LPPPaving EvaluatedForm
+type LPPStep info = BP.Step LPPProblem LPPPaving info
 
-getStepBoxes :: LPPStep -> BoxStore
+getStepBoxes :: LPPStep evalInfo -> BoxStore
 getStepBoxes step =
   Map.unions $ scopesStore : concat [[paving.inner.store, paving.outer.store] | paving <- pavings]
   where
@@ -48,7 +48,7 @@ getStepBoxes step =
     scopes = [p.scope | p <- BP.getStepProblems step] <> [p.scope | p <- pavings]
     scopesStore = Map.fromList [(box.boxHash, box) | box <- scopes]
 
-getStepExprs :: LPPStep -> ExprStore
+getStepExprs :: LPPStep info -> ExprStore
 getStepExprs step =
   constraintsStore `Map.union` undecidedStore
   where
@@ -62,7 +62,7 @@ getStepExprs step =
     problems = BP.getStepProblems step
     pavings = BP.getStepPavings step
 
-getStepForms :: LPPStep -> FormStore
+getStepForms :: LPPStep info -> FormStore
 getStepForms step =
   constraintsStore `Map.union` undecidedStore `Map.union` basicFormStore
   where
@@ -124,7 +124,7 @@ lppBranchAndPrune ::
     MonadUnliftIO m
   ) =>
   LPPPruningMethod ->
-  BP.StepsController m LPPStep ->
+  BP.StepsController m (LPPStep EvaluatedForm) ->
   LPPBPParams ->
   m LPPBPResult
 lppBranchAndPrune pruningMethod lppStepsController (LPPBPParams {..}) = do

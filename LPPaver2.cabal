@@ -78,6 +78,7 @@ executable lppaver2-server
       Connection
       RequestHandler
       Requests
+      Requests.EvalInfo
       Requests.ExampleProblems
       Requests.FormulaNodes
       Requests.RunSolver
