@@ -27,11 +27,14 @@ spec = describe "runtime pruning dispatch" $ do
 
     assertRemainingUpperBound "x" 5.0 paving
 
-  it "uses evaluated affine values for ordinary AA pruning" $ do
+  it "does not linearise nonlinear comparisons in AA linear pruning" $ do
     let box = mkBox [("x", (0.0, 1.0)), ("y", (0.0, 1.0))]
         form = sin (x - x) + y <= exprLit 0.5
 
-    paving <- pruneWith (affineMethod False) box form
+    basicPaving <- pruneWith (affineMethod False) box form
+    assertRemainingBoxUnchanged box basicPaving
+
+    paving <- pruneWith (affineMethod True) box form
 
     assertRemainingUpperBoundWithin aaBoundTolerance "y" 0.5 paving
 

@@ -96,8 +96,9 @@ data LPPBPParams = LPPBPParams
 
 data LPPPruningMethod = LPPPruningMethod
   { evalArithmetic :: EvalArithmetic,
-    -- | Tighten variable bounds read off single-variable linear relaxations
-    -- (exact, plus affine-arithmetic ones when evaluating in affine arithmetic).
+    -- | Tighten variable bounds read off comparisons that are exactly linear
+    -- in a single variable. Nonlinear comparisons are never linearised here,
+    -- so the result does not depend on the evaluation arithmetic.
     useLinearPrune :: Bool,
     -- | Simplex pruning with affine-arithmetic linearisations.
     -- Has no effect unless evaluating in affine arithmetic.
@@ -191,8 +192,8 @@ pruneWithEvalValues
   case maybeSimplexResult of
     Just simplexResult -> mkLinearPrunePaving scope simplifiedForm simplexResult
     Nothing ->
-      -- Fallback: simplex subsumes linear pruning with the same relaxations,
-      -- but linear pruning may still help when simplex is off or uses fewer relaxations.
+      -- Fallback: simplex subsumes linear pruning since it also uses the exact relaxations,
+      -- but linear pruning still helps when simplex is off.
       case maybeLinearPruneResult of
         Just linearPruneResult ->
           mkLinearPrunePaving scope simplifiedForm linearPruneResult
@@ -217,7 +218,7 @@ pruneWithEvalValues
 
     maybeLinearPruneResult
       | useLinearPrune =
-          linearPruneWith giveUpAccuracy simplifiedFormProblem (relaxComparisonWith exprNodes affineRelaxationsIfEvaluated)
+          linearPruneWith giveUpAccuracy simplifiedFormProblem (relaxComparisonWith exprNodes [])
       | otherwise = Nothing
 
 mkLinearPrunePaving :: Box -> Form -> LinearPruneResult -> BP.Paving Form Box Boxes
