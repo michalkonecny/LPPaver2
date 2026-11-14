@@ -11,6 +11,7 @@
 - Replace the `CanLineariseEval` and `CanProvideSimplexRelaxations` classes with explicit relaxation sources (`exactRelaxation`, `affineRelaxations`, `adCornerRelaxations`) combined by `relaxComparisonWith`; `linearPruneWith` and `simplexPrune` now take the resulting relaxation function instead of evaluated expression values.
 - Make `simplexPrune` a pure function; the simplex-method solver no longer requires IO.
 - Pin simplex-method to `3e2a86b`, which drops the `MonadIO` requirement from the two-phase simplex solver.
+- Pin simplex-method to `03b1e35`, the current `master`, which carries the solver's review fixes, refactors and performance work since `3e2a86b`. Pavings of all example problems are unchanged.
 - Collect formula variables by visiting each reachable formula and expression hash once, avoiding repeated expansion of shared DAGs.
 - Share affine source-variable preparation across comparisons within each ordinary or simplex pruning call.
 - Skip simplex objectives for volume variables absent from the extracted constraints, preserving their domains and feasibility checks.
