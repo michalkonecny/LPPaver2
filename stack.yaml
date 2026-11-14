@@ -60,7 +60,7 @@ extra-deps:
   # commit: 'c496038d44c328ae79fd7acd0b015bd7f9428294'
   commit: 'c77f581633cfc3a59b519af0d73235a5ecd789aa'
 - github: rasheedja/simplex-method
-  commit: '3e2a86bfecaec6fee13329bedee04cd36175de25'
+  commit: '03b1e35a25a44d1ca8dd944d0f1bdb680544d5d6'
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
