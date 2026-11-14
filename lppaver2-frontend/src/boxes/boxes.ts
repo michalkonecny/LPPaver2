@@ -22,24 +22,27 @@ export type Boxes = {
   boxes: BoxHash[];
 };
 
+/**
+ * The volume of the box over its volume variables.
+ * If the box has an excluded region, the part of that region inside the box is not counted.
+ */
 export function getBoxVolume(box: Box): number {
   let outlineVolume = 1;
+  // the volume of the excluded region clipped to the box outline
+  let exceptVolume = box.box_.except ? 1 : 0;
+
+  // Only the volume variables count, also for the excluded region:
+  // it lists the parameters too, and their domains have zero width.
   for (const varName of box.box_.volumeVars) {
     const interval = box.box_.varDomains[varName];
-    if (interval !== undefined) {
-      outlineVolume *= interval.u - interval.l;
-    }
-  }
+    if (interval === undefined) continue;
+    outlineVolume *= interval.u - interval.l;
 
-  let exceptVolume = 0;
-  if (box.box_.except) {
-    exceptVolume = 1;
-    for (const varName of Object.keys(box.box_.except)) {
-      const interval = box.box_.except[varName];
-      if (interval !== undefined) {
-        exceptVolume *= interval.u - interval.l;
-      }
-    }
+    // a variable not listed in the excluded region is not restricted by it
+    const excluded = box.box_.except?.[varName] ?? interval;
+    const overlapL = Math.max(interval.l, excluded.l);
+    const overlapU = Math.min(interval.u, excluded.u);
+    exceptVolume *= Math.max(0, overlapU - overlapL);
   }
 
   return outlineVolume - exceptVolume;

@@ -25,7 +25,6 @@ import AERN2.MP qualified as MP
 import AERN2.MP.Affine.Type ()
 import AERN2.MP.Ball (CentreRadius (CentreRadius))
 import AERN2.MP.Ball.Type qualified as MP
-import AERN2.MP.Dyadic (dyadic)
 -- has instance Hashable MPBall (TODO: move that instance)
 
 import Data.Hashable (Hashable (hash))
@@ -127,13 +126,39 @@ addParamValuesToBox paramVarValues box =
     rational2ball :: Rational -> MPBall
     rational2ball = MP.mpBallP (MP.prec 100)
 
+-- | The volume of the box over its volume variables, up to a constant factor
+-- (it multiplies the half-widths of the domains rather than their widths).
+-- If the box has an 'except' region, the part of that region inside the box is not counted.
 boxAreaD :: Box -> Double
-boxAreaD box =
-  product
-    ( map
-        (double . dyadic . MP.radius . \var -> box.box_.varDomains Map.! var)
-        (Set.toList box.box_.volumeVars)
-    )
+boxAreaD box = outlineArea - exceptArea
+  where
+    domains = box.box_.varDomains
+    volumeVars = Set.toList box.box_.volumeVars
+    outlineArea = product [halfWidth (endpointsD (domains Map.! var)) | var <- volumeVars]
+    -- Only the volume variables count, also for the 'except' region:
+    -- it lists the parameters too, and their domains have zero width.
+    exceptArea = case box.box_.except of
+      Nothing -> double 0
+      Just exceptDomains ->
+        product
+          [ halfWidth (overlap domain exceptDomain)
+            | var <- volumeVars,
+              let domain = endpointsD (domains Map.! var),
+              -- a variable not listed in the 'except' region is not restricted by it
+              let exceptDomain = maybe domain endpointsD (Map.lookup var exceptDomains)
+          ]
+
+    endpointsD :: MPBall -> (Double, Double)
+    endpointsD ball = (double l, double u)
+      where
+        (l, u) = MP.endpoints ball
+
+    halfWidth :: (Double, Double) -> Double
+    halfWidth (l, u) = max (double 0) (u - l) / 2
+
+    -- the intersection of two intervals, with u < l if they are disjoint
+    overlap :: (Double, Double) -> (Double, Double) -> (Double, Double)
+    overlap (l1, u1) (l2, u2) = (max l1 l2, min u1 u2)
 
 
 {- Collections of boxes. -}

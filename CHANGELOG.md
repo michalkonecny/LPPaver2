@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix the volume of boxes with an excluded region, ie the regions removed by linear or simplex pruning. The frontend multiplied the excluded region's widths over all variables including the zero-width parameters, so for problems with a parameter it counted every partial cut as the whole box and reported percentages such as "Outer: 174.66%". The backend's `boxAreaD`, used for the coverage in log output, ignored the excluded region altogether. Both now subtract the part of the excluded region inside the box, over the volume variables only.
 - Run the server with the parallel garbage collector turned off (`-N -qg`). On a 32-core machine the parallel collector made solver runs take about twice as long and use several times more CPU time.
 - The server measures the wall clock time and the overall CPU time of each solver run and sends them with every run status update; the frontend shows them next to the run status.
 - Force each step's pruning and splitting results in the solver thread before recording the step in the server state. Previously laziness deferred this work into the state update, which holds the state lock and so serialised the solver threads.
