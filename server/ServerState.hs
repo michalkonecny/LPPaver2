@@ -1,6 +1,7 @@
 module ServerState
   ( RunID (..),
     RunInfo (..),
+    RunTiming (..),
     LPPStepNoEvalInfo,
     ProblemKey,
     ServerState (..),
@@ -13,6 +14,7 @@ module ServerState
     getNewRunSteps,
     lookupEvalInfo,
     isRunFinished,
+    getRunFinalTiming,
   )
 where
 
@@ -59,8 +61,23 @@ data RunInfo = RunInfo
     steps :: !(Seq LPPStepNoEvalInfo), -- all steps reported so far, in order
     -- | The evaluation info of each progress step, indexed by the step's problem.
     evalInfos :: !(Map.Map ProblemKey EvaluatedForm),
-    finished :: !Bool
+    finished :: !Bool,
+    -- | How long the run took, set when the run finishes.
+    finalTiming :: !(Maybe RunTiming)
   }
+
+-- | How long a solver run has taken.
+data RunTiming = RunTiming
+  { -- | Elapsed wall clock time in seconds.
+    wallSeconds :: !Double,
+    -- | CPU time in seconds used by the whole server process, summed over all its threads.
+    -- Besides the solver threads, this includes garbage collection and anything else the server did meanwhile.
+    cpuSeconds :: !Double
+  }
+  deriving (Generic)
+
+instance A.ToJSON RunTiming where
+  toEncoding = A.genericToEncoding A.defaultOptions
 
 new :: ServerState
 new =
@@ -106,7 +123,7 @@ addNewSteps runId newSteps newBoxes state =
 
 emptyRunInfo :: RunID -> RunInfo
 emptyRunInfo runId =
-  RunInfo {runID = runId, steps = Seq.empty, evalInfos = Map.empty, finished = False}
+  RunInfo {runID = runId, steps = Seq.empty, evalInfos = Map.empty, finished = False, finalTiming = Nothing}
 
 dropEvalInfo :: LPPStep EvaluatedForm -> LPPStepNoEvalInfo
 dropEvalInfo step = case step of
@@ -125,9 +142,9 @@ startRun :: RunID -> ServerState -> ServerState
 startRun runId state =
   state {runs = Map.insert runId (emptyRunInfo runId) state.runs}
 
-finishRun :: RunID -> ServerState -> ServerState
-finishRun runId state =
-  state {runs = Map.adjust (\runInfo -> runInfo {finished = True}) runId state.runs}
+finishRun :: RunID -> RunTiming -> ServerState -> ServerState
+finishRun runId timing state =
+  state {runs = Map.adjust (\runInfo -> runInfo {finished = True, finalTiming = Just timing}) runId state.runs}
 
 -- | The steps of the run that are in the new state but not in the old state.
 -- Cheap, because steps are only ever appended.
@@ -146,3 +163,7 @@ lookupEvalInfo runId problemKey state =
 
 isRunFinished :: RunID -> ServerState -> Bool
 isRunFinished runId state = maybe False (.finished) (Map.lookup runId state.runs)
+
+-- | How long the run took, available once the run has finished.
+getRunFinalTiming :: RunID -> ServerState -> Maybe RunTiming
+getRunFinalTiming runId state = Map.lookup runId state.runs >>= (.finalTiming)

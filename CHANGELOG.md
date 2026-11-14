@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The server measures the wall clock time and the overall CPU time of each solver run and sends them with every run status update; the frontend shows them next to the run status.
 - Force each step's pruning and splitting results in the solver thread before recording the step in the server state. Previously laziness deferred this work into the state update, which holds the state lock and so serialised the solver threads.
 - The server no longer sends the evaluation info (expression and formula values) with every step. The frontend requests it with the new `RequestGetEvalInfo` request (answered by `ResponseEvalInfo`) when a step is focused, and caches it per run.
 - Linear pruning no longer uses affine-arithmetic linearisations of nonlinear comparisons, only comparisons that are exactly linear, so its effect no longer depends on the evaluation arithmetic. AA linearisations are used only by AA simplex pruning.

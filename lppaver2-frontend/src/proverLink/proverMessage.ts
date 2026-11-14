@@ -57,8 +57,17 @@ export type RunSolverRequest = {
 export type SolverRunStatusUpdate = {
   runId: string;
   status: RunStatus;
+  /** how long the run has taken so far, or in total if the status is SolverFinished */
+  timing: RunTiming;
   newSteps: Step[];
   newBoxes: Record<BoxHash, Box>;
+};
+
+export type RunTiming = {
+  /** elapsed wall clock time */
+  wallSeconds: number;
+  /** CPU time used by the prover process, summed over all its threads */
+  cpuSeconds: number;
 };
 
 export type RunStatus = 'RequestSent' | 'SolverRunning' | 'SolverFinished';

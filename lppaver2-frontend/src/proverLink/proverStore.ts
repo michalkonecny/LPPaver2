@@ -11,6 +11,7 @@ import {
   type ProblemWithParamSpec,
   type Arithmetic,
   type RunStatus,
+  type RunTiming,
   type ProverResponse,
   type ProverRequest,
   type RunSolverRequest,
@@ -23,6 +24,8 @@ export type RunInfo = {
   problemName: string;
   paramValues: Record<string, number>;
   status: RunStatus;
+  /** how long the run has taken so far, or in total once finished; null until the prover reports it */
+  timing: RunTiming | null;
   steps: Step[];
   /** evaluation info of progress steps by their problem, only for the steps for which it has been requested */
   evalInfos: Record<ProblemHash, EvalInfo>;
@@ -109,6 +112,7 @@ export const useProverStore = defineStore('prover', () => {
       problemName,
       paramValues,
       status: 'RequestSent',
+      timing: null,
       steps: [], // TODO: try this out
       evalInfos: {},
     });
@@ -178,9 +182,10 @@ export const useProverStore = defineStore('prover', () => {
           break;
         }
         case 'ResponseSolverRunStatusUpdate': {
-          const { runId, status, newSteps, newBoxes } = message.contents;
+          const { runId, status, timing, newSteps, newBoxes } = message.contents;
           if (runs.value[runId]) {
             runs.value[runId].status = status;
+            runs.value[runId].timing = timing;
             // absorb new steps and boxes
             if (!_.isEmpty(newSteps)) {
               runs.value[runId].steps = [...runs.value[runId].steps, ...newSteps];

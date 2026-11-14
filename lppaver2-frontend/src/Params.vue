@@ -18,6 +18,12 @@
 
   const currentRunStatus = computed(() => currentRunInfo.value?.status ?? null);
 
+  const currentRunTiming = computed(() => currentRunInfo.value?.timing ?? null);
+
+  function formatSeconds(seconds: number): string {
+    return `${seconds.toFixed(2)} s`;
+  }
+
   const canStartRun = computed(
     () => selectedProblemName.value !== null && currentRunStatus.value !== 'SolverRunning',
   );
@@ -187,6 +193,15 @@
       <span v-if="currentRunStatus === 'RequestSent'">Run in progress...</span>
       <span v-else-if="currentRunStatus === 'SolverRunning'">Run in progress...</span>
       <span v-else-if="currentRunStatus === 'SolverFinished'">Run finished</span>
+      <span
+        v-if="currentRunTiming"
+        class="ms-2"
+        title="Wall clock time and CPU time of the prover process summed over all its threads"
+      >
+        {{ currentRunStatus === 'SolverFinished' ? 'in' : 'after' }}
+        {{ formatSeconds(currentRunTiming.wallSeconds) }} (CPU
+        {{ formatSeconds(currentRunTiming.cpuSeconds) }})
+      </span>
     </div>
     <div v-if="stepsStats" class="d-flex align-items-baseline gap-2">
       <span class="p-1">{{ numberOfSteps }} step(s)</span>

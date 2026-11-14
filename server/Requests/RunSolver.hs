@@ -19,6 +19,8 @@ import Control.Monad.IO.Unlift (MonadIO (liftIO))
 import Control.Monad.Logger (runStdoutLoggingT)
 import Data.Aeson qualified as A
 import Data.Map qualified as Map
+import Data.Maybe (fromMaybe)
+import GHC.Clock (getMonotonicTime)
 import GHC.Generics (Generic)
 import GHC.Records
 import LPPaver2.BranchAndPrune (LPPBPParams (..), LPPPruningMethod (..), LPPStep, getStepBoxes, lppBranchAndPrune)
@@ -28,8 +30,9 @@ import LPPaver2.RealConstraints (EvalArithmetic (..), EvaluatedForm)
 import LPPaver2.RealConstraints.Boxes (BoxStore)
 import MixedTypesNumPrelude (convert, convertExactly)
 import RequestHandler (HandlerContinuation (..), IsRequestResponse (..), ModifyState, RequestHandlerInfo (..), aesonOptions)
-import ServerState (LPPStepNoEvalInfo, RunID (..))
+import ServerState (LPPStepNoEvalInfo, RunID (..), RunTiming (..))
 import ServerState qualified
+import System.CPUTime (getCPUTime)
 import System.IO.Unsafe (unsafePerformIO)
 import Prelude
 
@@ -70,6 +73,8 @@ data SolverRunStatus = SolverRunning | SolverFinished
 data SolverRunStatusUpdate = SolverRunStatusUpdate
   { runId :: RunID,
     status :: SolverRunStatus,
+    -- | How long the run has taken so far, or how long it took in total if the status is SolverFinished.
+    timing :: RunTiming,
     -- | The steps come without evaluation info, clients get it on demand using GetEvalInfoRequest.
     newSteps :: [LPPStepNoEvalInfo],
     newBoxes :: BoxStore
@@ -80,14 +85,21 @@ instance IsRequestResponse RunSolverRequest where
   type ResponseType RunSolverRequest = SolverRunStatusUpdate
   handleRequest RequestHandlerInfo {request, modifyState, respond, addStateChangeHandler, isConnectionClosed} = do
     stateAtStart <- modifyState $ \state -> let newState = ServerState.startRun runId state in (newState, newState)
+    -- start measuring the run's wall clock and CPU time
+    getTimingSoFar <- startTiming
     -- report solver has started
-    respond $ SolverRunStatusUpdate {runId, status = SolverRunning, newSteps = [], newBoxes = Map.empty}
+    timingAtStart <- getTimingSoFar
+    respond $ SolverRunStatusUpdate {runId, status = SolverRunning, timing = timingAtStart, newSteps = [], newBoxes = Map.empty}
     -- the publisher thread will report progress, coalescing steps reported in quick succession
-    addStateChangeHandler stateAtStart progressHandler
+    addStateChangeHandler stateAtStart (progressHandler getTimingSoFar)
 
     -- run the solver with our steps controller
     -- whatever happens, mark the run as finished so that the publisher reports any remaining steps and then that the solver has finished
-    flip finally (modifyState $ \state -> (ServerState.finishRun runId state, ())) $ do
+    -- the run's duration is taken here, when the solver stops, not when the publisher gets round to reporting it
+    let finishRun = do
+          finalTiming <- getTimingSoFar
+          modifyState $ \state -> (ServerState.finishRun runId finalTiming state, ())
+    flip finally finishRun $ do
       result <- runStdoutLoggingT $ do
         lppBranchAndPrune
           ( LPPPruningMethod
@@ -104,17 +116,34 @@ instance IsRequestResponse RunSolverRequest where
         putStrLn $ "Solver run " ++ show runId ++ " aborted: " ++ reason
     where
       runId = request.runId
-      progressHandler oldState newState = do
+      progressHandler getTimingSoFar oldState newState = do
         let newSteps = ServerState.getNewRunSteps runId oldState newState
             newBoxes = Map.unions (map getStepBoxes newSteps)
+        timingSoFar <- getTimingSoFar
         unless (null newSteps) $
           respond $
-            SolverRunStatusUpdate {runId, status = SolverRunning, newSteps, newBoxes}
+            SolverRunStatusUpdate {runId, status = SolverRunning, timing = timingSoFar, newSteps, newBoxes}
         case ServerState.isRunFinished runId newState of
           True -> do
-            respond $ SolverRunStatusUpdate {runId, status = SolverFinished, newSteps = [], newBoxes = Map.empty}
+            let finalTiming = fromMaybe timingSoFar (ServerState.getRunFinalTiming runId newState)
+            respond $ SolverRunStatusUpdate {runId, status = SolverFinished, timing = finalTiming, newSteps = [], newBoxes = Map.empty}
             pure RemoveHandler
           False -> pure KeepHandler
+
+-- | Start a stopwatch, returning an action that reads the wall clock and CPU time elapsed since.
+-- The CPU time is that of the whole process, ie summed over all threads.
+startTiming :: IO (IO RunTiming)
+startTiming = do
+  wallStart <- getMonotonicTime
+  cpuStart <- getCPUTime
+  pure $ do
+    wallNow <- getMonotonicTime
+    cpuNow <- getCPUTime
+    pure $
+      RunTiming
+        { wallSeconds = wallNow - wallStart,
+          cpuSeconds = fromIntegral (cpuNow - cpuStart) / 1e12 -- getCPUTime is in picoseconds
+        }
 
 lppStepsController :: (MonadIO m) => RunID -> ModifyState () -> BP.StepsController m (LPPStep EvaluatedForm)
 lppStepsController runId modifyState =
