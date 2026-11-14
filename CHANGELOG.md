@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Force each step's pruning and splitting results in the solver thread before recording the step in the server state. Previously laziness deferred this work into the state update, which holds the state lock and so serialised the solver threads.
 - The server no longer sends the evaluation info (expression and formula values) with every step. The frontend requests it with the new `RequestGetEvalInfo` request (answered by `ResponseEvalInfo`) when a step is focused, and caches it per run.
 - Linear pruning no longer uses affine-arithmetic linearisations of nonlinear comparisons, only comparisons that are exactly linear, so its effect no longer depends on the evaluation arithmetic. AA linearisations are used only by AA simplex pruning.
 - Replace the `useSimplex` switch with independent `useLinearPrune`, `useSimplexAA` and `useSimplexAD` switches in the pruning method, solver request and frontend. Linearisations are no longer selected by the evaluation arithmetic: AD corner linearisations also work with affine evaluation (using ball enclosures of the affine values), AA and AD linearisations are combined into one LP when both are enabled, and AA simplex has no effect under interval evaluation.

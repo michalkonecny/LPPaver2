@@ -13,7 +13,7 @@ where
 import AERN2.MP qualified as MP
 import AERN2.MP.Affine (MPAffine (..), MPAffineConfig (..))
 import BranchAndPrune.BranchAndPrune qualified as BP
-import Control.Exception (finally)
+import Control.Exception (evaluate, finally)
 import Control.Monad (forM_, unless)
 import Control.Monad.IO.Unlift (MonadIO (liftIO))
 import Control.Monad.Logger (runStdoutLoggingT)
@@ -122,7 +122,11 @@ lppStepsController runId modifyState =
   where
     -- only record the step; sending it to the client is done by the publisher thread
     reportStep step = liftIO $ do
-      modifyState $ \state -> (ServerState.addNewSteps runId [step] (getStepBoxes step) state, ())
+      -- Force the step's boxes here, in the solver thread, before taking the state lock.
+      -- Pruning and splitting are lazy and would otherwise be evaluated inside modifyState,
+      -- ie while holding the lock, which would serialise the solver threads.
+      stepBoxes <- evaluate (getStepBoxes step)
+      modifyState $ \state -> (ServerState.addNewSteps runId [step] stepBoxes state, ())
 
 -- | Turn an IO condition into a B&P shouldAbort function.
 -- The B&P engine requires a pure function, so we read the condition with unsafePerformIO.
