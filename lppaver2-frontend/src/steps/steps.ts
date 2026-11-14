@@ -1,5 +1,4 @@
 import type { Boxes, BoxHash } from '@/boxes/boxes';
-import type { EvalInfo } from '@/formulas/evalInfo';
 import type { Kleenean } from '@/formulas/kleenean';
 import type { Problem } from '@/problems/problems';
 
@@ -14,7 +13,8 @@ export type ProgressStep = {
   tag: 'ProgressStep';
   problem: Problem;
   progressPaving: Paving;
-  evalInfo: EvalInfo;
+  // The step's evaluation info is not included, it is requested from the prover on demand,
+  // see requestEvalInfo in proverStore.
 };
 
 export type Paving = {

@@ -9,6 +9,7 @@ import GHC.Records (HasField (getField))
 import LPPaver2.BranchAndPrune (LPPPruningMethod (..))
 import LPPaver2.PruneSpecSupport
   ( aaBoundTolerance,
+    noGiveUpAccuracy,
     sampleMPAffine,
     sampleMPBall,
     x,
@@ -26,11 +27,14 @@ spec = describe "runtime pruning dispatch" $ do
 
     assertRemainingUpperBound "x" 5.0 paving
 
-  it "uses evaluated affine values for ordinary AA pruning" $ do
+  it "does not linearise nonlinear comparisons in AA linear pruning" $ do
     let box = mkBox [("x", (0.0, 1.0)), ("y", (0.0, 1.0))]
         form = sin (x - x) + y <= exprLit 0.5
 
-    paving <- pruneWith (affineMethod False) box form
+    basicPaving <- pruneWith (affineMethod False) box form
+    assertRemainingBoxUnchanged box basicPaving
+
+    paving <- pruneWith (affineMethod True) box form
 
     assertRemainingUpperBoundWithin aaBoundTolerance "y" 0.5 paving
 
@@ -97,6 +101,36 @@ spec = describe "runtime pruning dispatch" $ do
     assertRemainingUpperBoundWithin aaBoundTolerance "x" 5.0 paving
     assertRemainingUpperBoundWithin aaBoundTolerance "y" 5.0 paving
 
+  it "does not prune when every pruning method is switched off" $ do
+    let box = mkBox [("x", (0.0, 10.0))]
+
+    paving <- pruneWith (mpBallMethod False) {useLinearPrune = False} box (x <= exprLit 5.0)
+
+    assertRemainingBoxUnchanged box paving
+
+  it "uses simplex pruning without linear pruning" $ do
+    let box = mkBox [("x", (0.0, 10.0)), ("y", (0.0, 10.0))]
+
+    paving <- pruneWith (affineMethod True) {useLinearPrune = False} box (x + y <= exprLit 5.0)
+
+    assertRemainingUpperBoundWithin aaBoundTolerance "x" 5.0 paving
+
+  it "ignores AA simplex pruning under interval evaluation" $ do
+    let box = mkBox [("x", (0.0, 1.0)), ("y", (0.0, 1.0))]
+        form = sin (x - x) + y <= exprLit 0.5
+
+    paving <- pruneWith (mpBallMethod False) {useLinearPrune = False, useSimplexAA = True} box form
+
+    assertRemainingBoxUnchanged box paving
+
+  it "dispatches affine-evaluated values to AD simplex pruning" $ do
+    let box = mkBox [("x", (1.0, 2.0))]
+        form = x * x <= exprLit 2.0
+
+    paving <- pruneWith (affineMethod False) {useLinearPrune = False, useSimplexAD = True} box form
+
+    assertRemainingUpperBoundWithin aaBoundTolerance "x" 1.5 paving
+
   it "preserves fixed parameters during runtime pruning" $ do
     let baseBox = mkBox [("x", (0.0, 10.0))]
         box = addParamValuesToBox (Map.fromList [("p", 1.0)]) baseBox
@@ -113,18 +147,26 @@ spec = describe "runtime pruning dispatch" $ do
           `shouldSatisfy` (\(lower, upper) -> rational lower == 1 && rational upper == 1)
         box'.box_.volumeVars `shouldBe` box.box_.volumeVars
 
+-- | Interval evaluation with linear pruning, optionally with AD simplex pruning.
 mpBallMethod :: Bool -> LPPPruningMethod
 mpBallMethod useSimplex =
   LPPPruningMethod
     { evalArithmetic = EvalArithmeticMPBall {sampleBall = sampleMPBall},
-      useSimplex
+      useLinearPrune = True,
+      useSimplexAA = False,
+      useSimplexAD = useSimplex,
+      giveUpAccuracy = noGiveUpAccuracy
     }
 
+-- | Affine evaluation with linear pruning, optionally with AA simplex pruning.
 affineMethod :: Bool -> LPPPruningMethod
 affineMethod useSimplex =
   LPPPruningMethod
     { evalArithmetic = EvalArithmeticAffine {sampleAffine = sampleMPAffine},
-      useSimplex
+      useLinearPrune = True,
+      useSimplexAA = useSimplex,
+      useSimplexAD = False,
+      giveUpAccuracy = noGiveUpAccuracy
     }
 
 pruneWith :: LPPPruningMethod -> Box -> Form -> IO (BP.Paving Form Box Boxes)

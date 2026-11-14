@@ -2,12 +2,16 @@ module LPPaver2.LinearPrune
   ( extractCIEorDIE,
     IEFormType (..),
     linearPrune,
-    linearPruneWithEvalValues,
+    linearPruneWith,
     LinearPruneResult (..),
     LinearRelaxation (..),
-    CanLineariseEval (..),
-    linearRelaxation,
+    RelaxComparison,
+    relaxComparisonWith,
+    exactRelaxation,
+    affineRelaxations,
+    adCornerRelaxations,
     tightenBoxByBounds,
+    domainWithinAccuracy,
   )
 where
 
@@ -18,11 +22,14 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import GHC.Records
 import LPPaver2.Linearisation
-  ( CanLineariseEval (..),
-    LinearRelaxation (..),
-    linearRelaxation,
+  ( LinearRelaxation (..),
+    RelaxComparison,
+    adCornerRelaxations,
+    affineRelaxations,
+    exactRelaxation,
+    relaxComparisonWith,
   )
-import LPPaver2.RealConstraints (ExprHash, ExprStore, Var)
+import LPPaver2.RealConstraints (ExprHash, Var)
 import LPPaver2.RealConstraints.Boxes
 import LPPaver2.RealConstraints.Form
 import MixedTypesNumPrelude
@@ -97,19 +104,24 @@ data LinearPruneResult = LinearPruneResult
     removedRegionTruth :: Bool
   }
 
-linearPrune :: BP.Problem Form Box -> Maybe LinearPruneResult
-linearPrune problem = linearPruneWithEvalValues problem (Map.empty :: Map.Map ExprHash MP.MPBall)
+-- | Whether a domain is narrow enough that B&P no longer splits or prunes it.
+domainWithinAccuracy :: Rational -> MP.MPBall -> Bool
+domainWithinAccuracy giveUpAccuracy ball = 2 * MP.radius ball <= giveUpAccuracy
 
-linearPruneWithEvalValues ::
-  (CanLineariseEval r) =>
+-- | Linear pruning using only the comparisons that are exactly linear.
+linearPrune :: Rational -> BP.Problem Form Box -> Maybe LinearPruneResult
+linearPrune giveUpAccuracy problem = linearPruneWith giveUpAccuracy problem (relaxComparisonWith problem.constraint.nodesE [])
+
+linearPruneWith ::
+  Rational ->
   BP.Problem Form Box ->
-  Map.Map ExprHash r ->
+  RelaxComparison ->
   Maybe LinearPruneResult
-linearPruneWithEvalValues BP.Problem {scope, constraint} exprValues =
+linearPruneWith giveUpAccuracy BP.Problem {scope, constraint} relaxComparison =
   let maybeIEInfo = extractCIEorDIE constraint
    in case maybeIEInfo of
-        Just (cieForm, CIE) -> linearPruneCIE scope cieForm.nodesE exprValues (extractIEsFromCIE cieForm)
-        Just (ieForm, IE) -> linearPruneCIE scope ieForm.nodesE exprValues [ieForm] -- TODO: try both CIE and DIE and use the better result
+        Just (cieForm, CIE) -> linearPruneCIE giveUpAccuracy scope relaxComparison (extractIEsFromCIE cieForm)
+        Just (ieForm, IE) -> linearPruneCIE giveUpAccuracy scope relaxComparison [ieForm] -- TODO: try both CIE and DIE and use the better result
         -- TODO: implement linear pruning for disjunctions of inequalities
         _ -> Nothing -- not a form suitable for linear pruning
 
@@ -131,8 +143,8 @@ data TightenResult
   | TightenNoImprovement
   | TightenImproved Box
 
-linearPruneCIE :: (CanLineariseEval r) => Box -> ExprStore -> Map.Map ExprHash r -> [Form] -> Maybe LinearPruneResult
-linearPruneCIE scope exprNodes exprValues ies
+linearPruneCIE :: Rational -> Box -> RelaxComparison -> [Form] -> Maybe LinearPruneResult
+linearPruneCIE giveUpAccuracy scope relaxComparison ies
   | any isInfeasible extractionResults =
       Just
         LinearPruneResult
@@ -140,7 +152,7 @@ linearPruneCIE scope exprNodes exprValues ies
             removedRegionTruth = False
           }
   | otherwise =
-      case tightenBoxByBoundsChecked scope varBoundsFromInequalities of
+      case tightenBoxByBoundsChecked giveUpAccuracy scope varBoundsFromInequalities of
         TightenInfeasible ->
           Just
             LinearPruneResult
@@ -150,7 +162,6 @@ linearPruneCIE scope exprNodes exprValues ies
         TightenNoImprovement -> Nothing
         TightenImproved newBox -> Just (makeResult newBox)
   where
-    relaxComparison = linearRelaxation exprNodes exprValues
     extractionResults = P.map extractVarBound ies
     varBoundsFromInequalities = P.concatMap boundsFromResult extractionResults
 
@@ -174,9 +185,7 @@ linearPruneCIE scope exprNodes exprValues ies
         _ -> Bounds [] -- not a comparison, shouldn't happen since we only call this on IEs
     boundsFromLessOrEqual :: ExprHash -> ExprHash -> BoundExtraction
     boundsFromLessOrEqual e1 e2 =
-      case relaxComparison e1 e2 of
-        Just relaxation -> boundsFromRelaxation relaxation
-        Nothing -> Bounds []
+      P.foldl mergeExtractions (Bounds []) (boundsFromRelaxation <$> relaxComparison e1 e2)
 
     mergeExtractions :: BoundExtraction -> BoundExtraction -> BoundExtraction
     mergeExtractions Infeasible _ = Infeasible
@@ -207,15 +216,16 @@ linearPruneCIE scope exprNodes exprValues ies
 
 -- | Intersect a box with variable bounds, returning the tightened box only
 -- when at least one positive-width domain shrinks by more than ten percent.
-tightenBoxByBounds :: Box -> [(Var, (Maybe Rational, Maybe Rational))] -> Maybe Box
-tightenBoxByBounds scope bounds =
-  case tightenBoxByBoundsChecked scope bounds of
+-- Domains within 'giveUpAccuracy' are left unchanged.
+tightenBoxByBounds :: Rational -> Box -> [(Var, (Maybe Rational, Maybe Rational))] -> Maybe Box
+tightenBoxByBounds giveUpAccuracy scope bounds =
+  case tightenBoxByBoundsChecked giveUpAccuracy scope bounds of
     TightenImproved box -> Just box
     TightenInfeasible -> Nothing
     TightenNoImprovement -> Nothing
 
-tightenBoxByBoundsChecked :: Box -> [(Var, (Maybe Rational, Maybe Rational))] -> TightenResult
-tightenBoxByBoundsChecked scope bounds
+tightenBoxByBoundsChecked :: Rational -> Box -> [(Var, (Maybe Rational, Maybe Rational))] -> TightenResult
+tightenBoxByBoundsChecked giveUpAccuracy scope bounds
   | hasEmptyDomain = TightenInfeasible
   | hasSignificantImprovement =
       TightenImproved
@@ -229,8 +239,9 @@ tightenBoxByBoundsChecked scope bounds
   | otherwise = TightenNoImprovement
   where
     varDomains = scope.box_.varDomains
-    -- Parameter domains participate in contradiction detection but are never
-    -- changed in the result because only volume variables may be pruned.
+    -- Parameter domains and domains within the give-up accuracy participate in
+    -- contradiction detection but are never changed in the result because only
+    -- volume variables that B&P would still split may be pruned.
     tightenedVarDomains = foldl applyBound varDomains bounds
 
     hasEmptyDomain = P.any domainIsEmpty (Map.toList varDomains)
@@ -256,6 +267,7 @@ tightenBoxByBoundsChecked scope bounds
 
     applyBound varDoms (var, (maybeLower, maybeUpper))
       | var `Set.notMember` scope.box_.volumeVars = varDoms
+      | P.maybe P.False (domainWithinAccuracy giveUpAccuracy) (Map.lookup var varDomains) = varDoms
       | otherwise = applyUpper $ applyLower varDoms
       where
         applyLower =

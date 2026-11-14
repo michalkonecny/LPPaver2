@@ -30,16 +30,11 @@
   });
 
   const formValues = computed(() => {
-    // identify the focused progress step (if any)
+    // available only once the prover has sent the evaluation info for the problem's step
     if (!props.problem) {
       return undefined;
     }
-    const step = stepsStore.stepFromProblem(props.problem);
-    if (step?.tag !== 'ProgressStep') {
-      return undefined;
-    }
-
-    return step.evalInfo.formValues;
+    return stepsStore.evalInfoFromProblem(props.problem)?.formValues;
   });
 
   const viewWidth = computed(() => window.innerWidth);

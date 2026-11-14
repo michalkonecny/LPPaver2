@@ -1,4 +1,5 @@
 import type { Box, BoxHash } from '@/boxes/boxes';
+import type { EvalInfo } from '@/formulas/evalInfo';
 import type { ExprF, ExprHash } from '@/formulas/exprs';
 import type { FormF, FormHash } from '@/formulas/forms';
 import type { Problem } from '@/problems/problems';
@@ -46,7 +47,9 @@ export type RunSolverRequest = {
   problemName: string;
   paramValues: Record<string, number>;
   arithmetic: Arithmetic;
-  useSimplex: boolean;
+  useLinearPrune: boolean;
+  useSimplexAA: boolean;
+  useSimplexAD: boolean;
   giveUpAccuracy: number;
   numberOfThreads: number;
 };
@@ -54,11 +57,35 @@ export type RunSolverRequest = {
 export type SolverRunStatusUpdate = {
   runId: string;
   status: RunStatus;
+  /** how long the run has taken so far, or in total if the status is SolverFinished */
+  timing: RunTiming;
   newSteps: Step[];
   newBoxes: Record<BoxHash, Box>;
 };
 
+export type RunTiming = {
+  /** elapsed wall clock time */
+  wallSeconds: number;
+  /** CPU time used by the prover process, summed over all its threads */
+  cpuSeconds: number;
+};
+
 export type RunStatus = 'RequestSent' | 'SolverRunning' | 'SolverFinished';
+
+// getting the evaluation info of a step on demand
+
+export type GetEvalInfoRequest = {
+  runId: string;
+  /** the problem of the progress step whose evaluation info is requested */
+  problem: Problem;
+};
+
+export type EvalInfoResponse = {
+  runId: string;
+  problem: Problem;
+  /** null if the run has no progress step for the problem */
+  evalInfo: EvalInfo | null;
+};
 
 //////////////////////////////
 // Overall request and response types
@@ -66,12 +93,14 @@ export type RunStatus = 'RequestSent' | 'SolverRunning' | 'SolverFinished';
 export type ProverRequest =
   | { tag: 'RequestGetExampleProblems'; contents: GetExampleProblemsRequest }
   | { tag: 'RequestKeepGettingFormulaNodes'; contents: KeepGettingFormulaNodesRequest }
-  | { tag: 'RequestRunSolver'; contents: RunSolverRequest };
+  | { tag: 'RequestRunSolver'; contents: RunSolverRequest }
+  | { tag: 'RequestGetEvalInfo'; contents: GetEvalInfoRequest };
 
 export type ProverResponse =
   | { tag: 'ResponseExampleProblems'; contents: ExampleProblemsResponse }
   | { tag: 'ResponseNewFormulaNodes'; contents: NewFormulaNodesResponse }
-  | { tag: 'ResponseSolverRunStatusUpdate'; contents: SolverRunStatusUpdate };
+  | { tag: 'ResponseSolverRunStatusUpdate'; contents: SolverRunStatusUpdate }
+  | { tag: 'ResponseEvalInfo'; contents: EvalInfoResponse };
 
 export function sendProverRequest(ws: Websocket, request: ProverRequest) {
   ws.send(JSON.stringify(request));

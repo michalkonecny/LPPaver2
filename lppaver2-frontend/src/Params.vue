@@ -18,6 +18,12 @@
 
   const currentRunStatus = computed(() => currentRunInfo.value?.status ?? null);
 
+  const currentRunTiming = computed(() => currentRunInfo.value?.timing ?? null);
+
+  function formatSeconds(seconds: number): string {
+    return `${seconds.toFixed(2)} s`;
+  }
+
   const canStartRun = computed(
     () => selectedProblemName.value !== null && currentRunStatus.value !== 'SolverRunning',
   );
@@ -35,7 +41,11 @@
   const selectedArithType = ref<ArithType>('BallArithmetic');
   const selectedPrecision = ref<number>(100);
   const selectedMaxTerms = ref<number>(10);
-  const useSimplex = ref<boolean>(false);
+  const useLinearPrune = ref<boolean>(true);
+  const useSimplexAA = ref<boolean>(false);
+  const useSimplexAD = ref<boolean>(false);
+  // AA linearisations need affine-arithmetic evaluation
+  const canUseSimplexAA = computed(() => selectedArithType.value === 'AffineArithmetic');
 
   const selectedArithmetic = computed<Arithmetic>(() => {
     return selectedArithType.value === 'BallArithmetic'
@@ -72,7 +82,11 @@
       selectedProblemName.value,
       paramsObj,
       selectedArithmetic.value,
-      useSimplex.value,
+      {
+        useLinearPrune: useLinearPrune.value,
+        useSimplexAA: useSimplexAA.value && canUseSimplexAA.value,
+        useSimplexAD: useSimplexAD.value,
+      },
       giveUpAccuracy.value,
       numberOfThreads.value,
     );
@@ -130,10 +144,26 @@
       <input
         class="form-check-input"
         type="checkbox"
-        id="useSimplex"
-        v-model="useSimplex"
+        id="useLinearPrune"
+        v-model="useLinearPrune"
       />
-      <label class="form-check-label" for="useSimplex">Use simplex pruning</label>
+      <label class="form-check-label" for="useLinearPrune">Linear pruning</label>
+    </div>
+    <div class="form-check">
+      <input
+        class="form-check-input"
+        type="checkbox"
+        id="useSimplexAA"
+        v-model="useSimplexAA"
+        :disabled="!canUseSimplexAA"
+      />
+      <label class="form-check-label" for="useSimplexAA" title="Requires affine arithmetic"
+        >Simplex (AA)</label
+      >
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="useSimplexAD" v-model="useSimplexAD" />
+      <label class="form-check-label" for="useSimplexAD">Simplex (AD)</label>
     </div>
     <!-- Input max size of box before giving up -->
     <label for="giveUpAccuracy" class="form-label">Max box size: </label>
@@ -163,6 +193,15 @@
       <span v-if="currentRunStatus === 'RequestSent'">Run in progress...</span>
       <span v-else-if="currentRunStatus === 'SolverRunning'">Run in progress...</span>
       <span v-else-if="currentRunStatus === 'SolverFinished'">Run finished</span>
+      <span
+        v-if="currentRunTiming"
+        class="ms-2"
+        title="Wall clock time and CPU time of the prover process summed over all its threads"
+      >
+        {{ currentRunStatus === 'SolverFinished' ? 'in' : 'after' }}
+        {{ formatSeconds(currentRunTiming.wallSeconds) }} (CPU
+        {{ formatSeconds(currentRunTiming.cpuSeconds) }})
+      </span>
     </div>
     <div v-if="stepsStats" class="d-flex align-items-baseline gap-2">
       <span class="p-1">{{ numberOfSteps }} step(s)</span>

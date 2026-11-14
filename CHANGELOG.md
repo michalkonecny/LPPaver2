@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Run the server with the parallel garbage collector turned off (`-N -qg`). On a 32-core machine the parallel collector made solver runs take about twice as long and use several times more CPU time.
+- The server measures the wall clock time and the overall CPU time of each solver run and sends them with every run status update; the frontend shows them next to the run status.
+- Force each step's pruning and splitting results in the solver thread before recording the step in the server state. Previously laziness deferred this work into the state update, which holds the state lock and so serialised the solver threads.
+- The server no longer sends the evaluation info (expression and formula values) with every step. The frontend requests it with the new `RequestGetEvalInfo` request (answered by `ResponseEvalInfo`) when a step is focused, and caches it per run.
+- Linear pruning no longer uses affine-arithmetic linearisations of nonlinear comparisons, only comparisons that are exactly linear, so its effect no longer depends on the evaluation arithmetic. AA linearisations are used only by AA simplex pruning.
+- Replace the `useSimplex` switch with independent `useLinearPrune`, `useSimplexAA` and `useSimplexAD` switches in the pruning method, solver request and frontend. Linearisations are no longer selected by the evaluation arithmetic: AD corner linearisations also work with affine evaluation (using ball enclosures of the affine values), AA and AD linearisations are combined into one LP when both are enabled, and AA simplex has no effect under interval evaluation.
+- Replace the `CanLineariseEval` and `CanProvideSimplexRelaxations` classes with explicit relaxation sources (`exactRelaxation`, `affineRelaxations`, `adCornerRelaxations`) combined by `relaxComparisonWith`; `linearPruneWith` and `simplexPrune` now take the resulting relaxation function instead of evaluated expression values.
 - Make `simplexPrune` a pure function; the simplex-method solver no longer requires IO.
 - Pin simplex-method to `3e2a86b`, which drops the `MonadIO` requirement from the two-phase simplex solver.
 - Collect formula variables by visiting each reachable formula and expression hash once, avoiding repeated expansion of shared DAGs.

@@ -16,7 +16,7 @@ module LPPaver2.BranchAndPrune
 where
 
 import AERN2.MP (Kleenean (..), MPBall)
-import AERN2.MP qualified as MP
+import AERN2.MP.Affine (MPAffine)
 import BranchAndPrune.BranchAndPrune qualified as BP
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
@@ -24,10 +24,11 @@ import Control.Monad.Logger (MonadLogger)
 import Data.Hashable (Hashable (hash))
 import Data.Map qualified as Map
 import GHC.Records
-import LPPaver2.LinearPrune (LinearPruneResult (..), linearPruneWithEvalValues)
+import LPPaver2.LinearPrune (LinearPruneResult (..), domainWithinAccuracy, linearPruneWith)
+import LPPaver2.Linearisation (adCornerRelaxations, affineRelaxations, relaxComparisonWith)
 import LPPaver2.RealConstraints
 import LPPaver2.RealConstraints.Eval (EvaluatedFormR (..))
-import LPPaver2.SimplexPrune (CanProvideSimplexRelaxations, simplexPrune)
+import LPPaver2.SimplexPrune (simplexPrune)
 import MixedTypesNumPrelude
 import Text.Printf (printf)
 
@@ -37,9 +38,9 @@ type LPPProblem = BP.Problem Form Box
 
 type LPPPaving = BP.Paving Form Box Boxes
 
-type LPPStep = BP.Step LPPProblem LPPPaving EvaluatedForm
+type LPPStep info = BP.Step LPPProblem LPPPaving info
 
-getStepBoxes :: LPPStep -> BoxStore
+getStepBoxes :: LPPStep evalInfo -> BoxStore
 getStepBoxes step =
   Map.unions $ scopesStore : concat [[paving.inner.store, paving.outer.store] | paving <- pavings]
   where
@@ -47,7 +48,7 @@ getStepBoxes step =
     scopes = [p.scope | p <- BP.getStepProblems step] <> [p.scope | p <- pavings]
     scopesStore = Map.fromList [(box.boxHash, box) | box <- scopes]
 
-getStepExprs :: LPPStep -> ExprStore
+getStepExprs :: LPPStep info -> ExprStore
 getStepExprs step =
   constraintsStore `Map.union` undecidedStore
   where
@@ -61,7 +62,7 @@ getStepExprs step =
     problems = BP.getStepProblems step
     pavings = BP.getStepPavings step
 
-getStepForms :: LPPStep -> FormStore
+getStepForms :: LPPStep info -> FormStore
 getStepForms step =
   constraintsStore `Map.union` undecidedStore `Map.union` basicFormStore
   where
@@ -95,12 +96,22 @@ data LPPBPParams = LPPBPParams
 
 data LPPPruningMethod = LPPPruningMethod
   { evalArithmetic :: EvalArithmetic,
-    useSimplex :: Bool
+    -- | Tighten variable bounds read off comparisons that are exactly linear
+    -- in a single variable. Nonlinear comparisons are never linearised here,
+    -- so the result does not depend on the evaluation arithmetic.
+    useLinearPrune :: Bool,
+    -- | Simplex pruning with affine-arithmetic linearisations.
+    -- Has no effect unless evaluating in affine arithmetic.
+    useSimplexAA :: Bool,
+    -- | Simplex pruning with interval automatic-differentiation corner linearisations.
+    useSimplexAD :: Bool,
+    -- | Pruning does not tighten domains whose diameter is at most this (normally the B&P give-up accuracy).
+    giveUpAccuracy :: Rational
   }
 
 shouldGiveUpOnBPLPPProblem :: Rational -> LPPProblem -> Bool
 shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
-  all accuracyBelowThreshold domainsOfSplitVars
+  all (domainWithinAccuracy giveUpAccuracy) domainsOfSplitVars
   where
     domainsOfSplitVars =
       [ ball
@@ -108,19 +119,12 @@ shouldGiveUpOnBPLPPProblem giveUpAccuracy (BP.Problem {scope}) =
           Just ball <- [Map.lookup var scope.box_.varDomains]
       ]
 
-    accuracyBelowThreshold :: MPBall -> Bool
-    accuracyBelowThreshold ball =
-      -- trace (printf "Checking if box with radius %s should be given up (threshold: %s)" (show (MP.radius ball)) (show $ double giveUpAccuracy)) $
-      diameter <= giveUpAccuracy
-      where
-        diameter = 2 * MP.radius ball
-
 lppBranchAndPrune ::
   ( MonadLogger m,
     MonadUnliftIO m
   ) =>
   LPPPruningMethod ->
-  BP.StepsController m LPPStep ->
+  BP.StepsController m (LPPStep EvaluatedForm) ->
   LPPBPParams ->
   m LPPBPResult
 lppBranchAndPrune pruningMethod lppStepsController (LPPBPParams {..}) = do
@@ -168,34 +172,54 @@ instance
       pruneUncertain =
         case evaluatedForm of
           EvaluatedFormMPBall (EvaluatedFormR {exprValues}) ->
-            pruneWithEvalValues pruningMethod.useSimplex scope simplifiedFormProblem exprValues
+            pure $ pruneWithEvalValues pruningMethod scope simplifiedFormProblem Nothing exprValues
           EvaluatedFormAffine (EvaluatedFormR {exprValues}) ->
-            pruneWithEvalValues pruningMethod.useSimplex scope simplifiedFormProblem exprValues
+            pure $ pruneWithEvalValues pruningMethod scope simplifiedFormProblem (Just exprValues) (Map.map convertExactly exprValues)
 
+-- | Prune using the relaxations enabled in the pruning method.
+-- The affine values are available only when evaluating in affine arithmetic,
+-- the ball values are always available.
 pruneWithEvalValues ::
-  (Applicative m, CanProvideSimplexRelaxations r) =>
-  Bool ->
+  LPPPruningMethod ->
   Box ->
   BP.Problem Form Box ->
-  Map.Map ExprHash r ->
-  m (BP.Paving Form Box Boxes)
-pruneWithEvalValues useSimplex scope simplifiedFormProblem exprValues = do
-  let maybeSimplexResult =
-        if useSimplex
-          then simplexPrune simplifiedFormProblem.scope simplifiedForm exprValues
-          else Nothing
+  Maybe (Map.Map ExprHash MPAffine) ->
+  Map.Map ExprHash MPBall ->
+  BP.Paving Form Box Boxes
+pruneWithEvalValues 
+      (LPPPruningMethod {useLinearPrune, useSimplexAA, useSimplexAD, giveUpAccuracy}) 
+      scope simplifiedFormProblem maybeAffineValues ballValues =
   case maybeSimplexResult of
-    Just simplexResult -> pure $ mkLinearPrunePaving scope simplifiedForm simplexResult
+    Just simplexResult -> mkLinearPrunePaving scope simplifiedForm simplexResult
     Nothing ->
-      -- Defensive fallback: simplex currently subsumes all relaxations supported
-      -- by linear pruning, but retain this for future solver/relaxation changes.
-      case linearPruneWithEvalValues simplifiedFormProblem exprValues of
+      -- Fallback: simplex subsumes linear pruning since it also uses the exact relaxations,
+      -- but linear pruning still helps when simplex is off.
+      case maybeLinearPruneResult of
         Just linearPruneResult ->
-          pure $ mkLinearPrunePaving scope simplifiedForm linearPruneResult
+          mkLinearPrunePaving scope simplifiedForm linearPruneResult
         _ ->
-          pure $ BP.pavingUndecided scope [simplifiedFormProblem]
+          BP.pavingUndecided scope [simplifiedFormProblem]
   where
     simplifiedForm = simplifiedFormProblem.constraint
+    simplifiedScope = simplifiedFormProblem.scope
+    exprNodes = simplifiedForm.nodesE
+
+    affineRelaxationsIfEvaluated =
+      [affineRelaxations exprNodes affineValues | Just affineValues <- [maybeAffineValues]]
+
+    simplexLinearisations =
+      [relax | useSimplexAA, relax <- affineRelaxationsIfEvaluated]
+        <> [adCornerRelaxations simplifiedScope exprNodes ballValues | useSimplexAD]
+
+    maybeSimplexResult
+      | null simplexLinearisations = Nothing
+      | otherwise =
+          simplexPrune giveUpAccuracy simplifiedScope simplifiedForm (relaxComparisonWith exprNodes simplexLinearisations)
+
+    maybeLinearPruneResult
+      | useLinearPrune =
+          linearPruneWith giveUpAccuracy simplifiedFormProblem (relaxComparisonWith exprNodes [])
+      | otherwise = Nothing
 
 mkLinearPrunePaving :: Box -> Form -> LinearPruneResult -> BP.Paving Form Box Boxes
 mkLinearPrunePaving scope simplifiedForm LinearPruneResult {maybeRemainingBox, removedRegionTruth} =

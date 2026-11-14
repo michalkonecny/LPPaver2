@@ -1,6 +1,6 @@
 import { defineStore, storeToRefs } from 'pinia';
 import { computed, ref, watch, type Ref } from 'vue';
-import type { ExprValue } from '@/formulas/evalInfo';
+import type { EvalInfo, ExprValue } from '@/formulas/evalInfo';
 import { problemToProblemHash, type Problem, type ProblemHash } from '@/problems/problems';
 import { type ExprHash } from '../formulas/exprs';
 import { type FormOrExprHash } from '../formulas/forms';
@@ -16,6 +16,9 @@ export type ProverStateStats = {
 };
 
 export const useStepsStore = defineStore('steps', () => {
+  const proverStore = useProverStore();
+  const { runs, currentRunId } = storeToRefs(proverStore);
+
   const steps: Ref<Step[]> = ref([]);
   const numberOfSteps = ref(0); // keep steps separately to make it easier to define reactive dependencies
   const _problem2step: Ref<Record<ProblemHash, Step>> = ref({});
@@ -24,12 +27,15 @@ export const useStepsStore = defineStore('steps', () => {
   const focusedProblemSubFormExpr: Ref<FormOrExprHash | null> = ref(null); // set in App.vue when user clicks on a sub-form or sub-expr
   const zoomedProblem: Ref<Problem | null> = ref(null);
 
-  const focusedExprValues = computed<Record<ExprHash, ExprValue> | undefined>(() => {
-    if (!focusedProblem.value) return undefined;
-    const step = _problem2step.value[problemToProblemHash(focusedProblem.value)];
-    if (!step || step.tag !== 'ProgressStep') return undefined;
-    return step.evalInfo.exprValues;
-  });
+  // The evaluation info of the focused step.
+  // It is undefined until the prover sends it in response to the request made when the step gets focused.
+  const focusedEvalInfo = computed<EvalInfo | undefined>(() =>
+    focusedProblem.value ? evalInfoFromProblem(focusedProblem.value) : undefined,
+  );
+
+  const focusedExprValues = computed<Record<ExprHash, ExprValue> | undefined>(
+    () => focusedEvalInfo.value?.exprValues,
+  );
 
   const stepsStats = computed<ProverStateStats | undefined>(() => {
     if (!rootProblem.value) return undefined;
@@ -81,6 +87,7 @@ export const useStepsStore = defineStore('steps', () => {
     setInitProblem,
     resetSteps,
     stepFromProblem,
+    evalInfoFromProblem,
     focusedExprValues,
     stepsStats,
   };
@@ -113,9 +120,21 @@ export const useStepsStore = defineStore('steps', () => {
     return step;
   }
 
+  /** The evaluation info of the step for the given problem, available only once the step has been focused. */
+  function evalInfoFromProblem(p: Problem): EvalInfo | undefined {
+    if (!currentRunId.value) return undefined;
+    return proverStore.getEvalInfo(currentRunId.value, p);
+  }
+
+  // request the evaluation info of a step from the prover when the step gets focused
+  const focusedStep = computed(() =>
+    focusedProblem.value ? stepFromProblem(focusedProblem.value) : null,
+  );
+  watch(focusedStep, (step) => {
+    if (step?.tag !== 'ProgressStep' || !currentRunId.value) return;
+    proverStore.requestEvalInfo(currentRunId.value, step.problem);
+  });
   // track the steps of the current run
-  const proverStore = useProverStore();
-  const { runs, currentRunId } = storeToRefs(proverStore);
   const currentRunSteps = computed(() => {
     const steps = runs.value[currentRunId.value ?? '']?.steps;
     if (!steps || steps.length == 0) return undefined;

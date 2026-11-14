@@ -11,6 +11,7 @@ import Data.Text.Encoding qualified as T
 import GHC.Generics (Generic)
 import GHC.Records
 import RequestHandler (IsRequestResponse (..), RequestHandlerInfo (..), aesonOptions, delegatedRequestInfo)
+import Requests.EvalInfo (EvalInfoResponse, GetEvalInfoRequest)
 import Requests.ExampleProblems (ExampleProblemsResponse, GetExampleProblemsRequest)
 import Requests.FormulaNodes (KeepGettingFormulaNodesRequest, NewFormulaNodesResponse)
 import Requests.RunSolver (RunSolverRequest, SolverRunStatusUpdate)
@@ -20,12 +21,14 @@ data Request
   = RequestGetExampleProblems GetExampleProblemsRequest
   | RequestKeepGettingFormulaNodes KeepGettingFormulaNodesRequest
   | RequestRunSolver RunSolverRequest
+  | RequestGetEvalInfo GetEvalInfoRequest
   deriving (Generic, Show)
 
 data Response
   = ResponseExampleProblems ExampleProblemsResponse
   | ResponseNewFormulaNodes NewFormulaNodesResponse
   | ResponseSolverRunStatusUpdate SolverRunStatusUpdate
+  | ResponseEvalInfo EvalInfoResponse
   deriving (Generic)
 
 instance IsRequestResponse Request where
@@ -38,6 +41,8 @@ instance IsRequestResponse Request where
         handleRequest (delegatedRequestInfo req ResponseNewFormulaNodes info)
       RequestRunSolver req ->
         handleRequest (delegatedRequestInfo req ResponseSolverRunStatusUpdate info)
+      RequestGetEvalInfo req ->
+        handleRequest (delegatedRequestInfo req ResponseEvalInfo info)
 
 instance A.FromJSON Request where
   parseJSON = A.genericParseJSON aesonOptions
