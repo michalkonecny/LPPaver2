@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Run the server with the parallel garbage collector turned off (`-N -qg`). On a 32-core machine the parallel collector made solver runs take about twice as long and use several times more CPU time.
 - The server measures the wall clock time and the overall CPU time of each solver run and sends them with every run status update; the frontend shows them next to the run status.
 - Force each step's pruning and splitting results in the solver thread before recording the step in the server state. Previously laziness deferred this work into the state update, which holds the state lock and so serialised the solver threads.
 - The server no longer sends the evaluation info (expression and formula values) with every step. The frontend requests it with the new `RequestGetEvalInfo` request (answered by `ResponseEvalInfo`) when a step is focused, and caches it per run.
